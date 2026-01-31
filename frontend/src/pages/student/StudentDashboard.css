@@ -1,0 +1,109 @@
+.progress-container {
+    padding: var(--spacing-4);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-xl);
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-3);
+    font-weight: 500;
+}
+
+.progress-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--spacing-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+}
+
+.profile-card {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-6);
+    padding: var(--spacing-8);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+    border-radius: var(--radius-2xl);
+    color: var(--color-white);
+    margin-bottom: var(--spacing-6);
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+}
+
+.profile-info h2 {
+    color: var(--color-white);
+    margin-bottom: var(--spacing-1);
+}
+
+.profile-info p {
+    opacity: 0.8;
+    font-size: var(--font-size-sm);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-4);
+}
+
+.info-item {
+    padding: var(--spacing-4);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-lg);
+}
+
+.info-item label {
+    display: block;
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    margin-bottom: var(--spacing-1);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-item span {
+    font-weight: 500;
+    color: var(--color-gray-900);
+}
+
+.attendance-table,
+.marks-table {
+    margin-top: var(--spacing-4);
+}
+
+.subject-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-4);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-3);
+}
+
+.subject-row:last-child {
+    margin-bottom: 0;
+}
+
+.subject-name {
+    font-weight: 500;
+}
+
+.subject-stats {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+}

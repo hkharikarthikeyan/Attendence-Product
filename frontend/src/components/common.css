@@ -1,0 +1,116 @@
+.filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-4);
+    padding: var(--spacing-4);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-xl);
+    margin-bottom: var(--spacing-6);
+}
+
+.filters-bar .form-group {
+    flex: 1;
+    min-width: 150px;
+}
+
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--spacing-6);
+}
+
+.event-card {
+    background: var(--color-white);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-6);
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-base);
+}
+
+.event-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-xl);
+}
+
+.event-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.event-card h3 {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-gray-900);
+    margin-bottom: var(--spacing-2);
+}
+
+.event-description {
+    color: var(--color-gray-600);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-4);
+}
+
+.event-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    color: var(--color-gray-500);
+    font-size: var(--font-size-sm);
+}
+
+.event-meta svg {
+    width: 16px;
+    height: 16px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-16);
+    color: var(--color-gray-400);
+    grid-column: 1 / -1;
+}
+
+.empty-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: var(--spacing-4);
+    opacity: 0.5;
+}
+
+.modal-lg {
+    max-width: 800px;
+}
+
+.attendance-buttons {
+    display: flex;
+    gap: var(--spacing-2);
+}
+
+.btn-sm {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-xs);
+}
+
+.btn-success {
+    background: var(--color-success);
+    color: var(--color-white);
+}
+
+.btn-success:hover {
+    background: #059669;
+}
+
+.btn-warning {
+    background: var(--color-warning);
+    color: var(--color-gray-900);
+}
+
+.btn-warning:hover {
+    background: #d97706;
+}

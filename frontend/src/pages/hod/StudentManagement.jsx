@@ -1,0 +1,304 @@
+import { useState, useEffect } from 'react';
+import { hodAPI } from '../../services/api';
+import './FacultyManagement.css';
+
+const StudentManagement = () => {
+    const [students, setStudents] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [filters, setFilters] = useState({ class_year: '', section: '', batch: '' });
+    const [formData, setFormData] = useState({
+        name: '', email: '', password: '', register_number: '',
+        roll_number: '', mobile: '', father_name: '', mother_name: '',
+        class_year: '', section: '', batch: '',
+    });
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    useEffect(() => { loadStudents(); }, [filters]);
+
+    const loadStudents = async () => {
+        try {
+            const activeFilters = Object.fromEntries(
+                Object.entries(filters).filter(([_, v]) => v)
+            );
+            const data = await hodAPI.getStudents(activeFilters);
+            setStudents(data);
+        } catch (err) {
+            setError('Failed to load students');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            if (editingStudent) {
+                await hodAPI.updateStudent(editingStudent.id, {
+                    name: formData.name, mobile: formData.mobile,
+                    father_name: formData.father_name, mother_name: formData.mother_name,
+                    class_year: formData.class_year, section: formData.section, batch: formData.batch,
+                });
+                setSuccess('Student updated successfully');
+            } else {
+                await hodAPI.createStudent(formData);
+                setSuccess('Student created successfully');
+            }
+            loadStudents();
+            closeModal();
+        } catch (err) {
+            setError(err.message || 'Operation failed');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this student?')) return;
+        try {
+            await hodAPI.deleteStudent(id);
+            setSuccess('Student deleted successfully');
+            loadStudents();
+        } catch (err) {
+            setError(err.message || 'Failed to delete student');
+        }
+    };
+
+    const openModal = (student = null) => {
+        if (student) {
+            setEditingStudent(student);
+            setFormData({ ...student, password: '' });
+        } else {
+            setEditingStudent(null);
+            setFormData({
+                name: '', email: '', password: '', register_number: '',
+                roll_number: '', mobile: '', father_name: '', mother_name: '',
+                class_year: '', section: '', batch: '',
+            });
+        }
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingStudent(null);
+    };
+
+    useEffect(() => {
+        if (success) {
+            const timer = setTimeout(() => setSuccess(''), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [success]);
+
+    if (loading) {
+        return (
+            <div className="loading-container">
+                <div className="spinner"></div>
+                <p>Loading students...</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="management-page">
+            <header className="page-header">
+                <div>
+                    <h1>Student Management</h1>
+                    <p>Manage students in your department</p>
+                </div>
+                <button className="btn btn-primary" onClick={() => openModal()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Add Student
+                </button>
+            </header>
+
+            {success && <div className="toast toast-success">{success}</div>}
+            {error && <div className="alert alert-error">{error}</div>}
+
+            <div className="filters-bar">
+                <div className="form-group">
+                    <label className="form-label">Class/Year</label>
+                    <select
+                        className="form-input form-select"
+                        value={filters.class_year}
+                        onChange={(e) => setFilters({ ...filters, class_year: e.target.value })}
+                    >
+                        <option value="">All</option>
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                    </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Section</label>
+                    <select
+                        className="form-input form-select"
+                        value={filters.section}
+                        onChange={(e) => setFilters({ ...filters, section: e.target.value })}
+                    >
+                        <option value="">All</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="table-container">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Register No</th>
+                            <th>Roll No</th>
+                            <th>Class</th>
+                            <th>Section</th>
+                            <th>Mobile</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {students.length > 0 ? (
+                            students.map((s) => (
+                                <tr key={s.id}>
+                                    <td>
+                                        <div className="user-cell">
+                                            <div className="user-avatar">{s.name.charAt(0)}</div>
+                                            <span>{s.name}</span>
+                                        </div>
+                                    </td>
+                                    <td>{s.register_number}</td>
+                                    <td>{s.roll_number}</td>
+                                    <td>{s.class_year || '-'}</td>
+                                    <td>{s.section || '-'}</td>
+                                    <td>{s.mobile || '-'}</td>
+                                    <td>
+                                        <div className="action-buttons">
+                                            <button className="btn btn-icon btn-secondary" onClick={() => openModal(s)} title="Edit">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                                </svg>
+                                            </button>
+                                            <button className="btn btn-icon btn-danger" onClick={() => handleDelete(s.id)} title="Delete">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <polyline points="3 6 5 6 21 6" />
+                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr><td colSpan="7" className="text-center text-muted">No students found</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {showModal && (
+                <div className="modal-overlay" onClick={closeModal}>
+                    <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>{editingStudent ? 'Edit Student' : 'Add New Student'}</h3>
+                            <button className="btn btn-icon" onClick={closeModal}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit}>
+                            <div className="modal-body">
+                                <div className="form-grid">
+                                    <div className="form-group">
+                                        <label className="form-label">Full Name *</label>
+                                        <input type="text" className="form-input" value={formData.name}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Register Number *</label>
+                                        <input type="text" className="form-input" value={formData.register_number}
+                                            onChange={(e) => setFormData({ ...formData, register_number: e.target.value })}
+                                            required disabled={!!editingStudent} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Roll Number *</label>
+                                        <input type="text" className="form-input" value={formData.roll_number}
+                                            onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })} required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Email *</label>
+                                        <input type="email" className="form-input" value={formData.email}
+                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                            required disabled={!!editingStudent} />
+                                    </div>
+                                    {!editingStudent && (
+                                        <div className="form-group">
+                                            <label className="form-label">Password *</label>
+                                            <input type="password" className="form-input" value={formData.password}
+                                                onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
+                                        </div>
+                                    )}
+                                    <div className="form-group">
+                                        <label className="form-label">Mobile</label>
+                                        <input type="tel" className="form-input" value={formData.mobile}
+                                            onChange={(e) => setFormData({ ...formData, mobile: e.target.value })} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Father's Name</label>
+                                        <input type="text" className="form-input" value={formData.father_name}
+                                            onChange={(e) => setFormData({ ...formData, father_name: e.target.value })} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Mother's Name</label>
+                                        <input type="text" className="form-input" value={formData.mother_name}
+                                            onChange={(e) => setFormData({ ...formData, mother_name: e.target.value })} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Class/Year</label>
+                                        <select className="form-input form-select" value={formData.class_year}
+                                            onChange={(e) => setFormData({ ...formData, class_year: e.target.value })}>
+                                            <option value="">Select</option>
+                                            <option value="1st Year">1st Year</option>
+                                            <option value="2nd Year">2nd Year</option>
+                                            <option value="3rd Year">3rd Year</option>
+                                            <option value="4th Year">4th Year</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Section</label>
+                                        <select className="form-input form-select" value={formData.section}
+                                            onChange={(e) => setFormData({ ...formData, section: e.target.value })}>
+                                            <option value="">Select</option>
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="C">C</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Batch</label>
+                                        <input type="text" className="form-input" value={formData.batch}
+                                            onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+                                            placeholder="e.g., 2024-2028" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
+                                <button type="submit" className="btn btn-primary">{editingStudent ? 'Update' : 'Create'} Student</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default StudentManagement;
