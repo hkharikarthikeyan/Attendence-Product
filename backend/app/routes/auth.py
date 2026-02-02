@@ -1,15 +1,15 @@
+import bcrypt
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
 from jose import jwt
-from passlib.context import CryptContext
 from ..config import settings
 from ..database import supabase
 
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 
 class LoginRequest(BaseModel):
@@ -44,39 +44,28 @@ def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """Login endpoint for all user roles."""
     try:
-        # Query user from database based on role
-        if request.role == "hod":
-            result = supabase.table("hod").select("*, users(*)").eq("users.email", request.email).execute()
-        elif request.role == "faculty":
-            result = supabase.table("faculty").select("*, users(*)").eq("users.email", request.email).execute()
-        elif request.role == "student":
-            result = supabase.table("students").select("*, users(*)").eq("users.email", request.email).execute()
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid role specified"
-            )
+        # Get user from users table
+        user_result = supabase.table("users").select("*").eq("email", request.email).eq("role", request.role).execute()
         
-        if not result.data:
+        if not user_result.data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
         
-        user_data = result.data[0]
-        user = user_data.get("users", {})
+        user = user_result.data[0]
         
         # Verify password
         if not verify_password(request.password, user.get("password_hash", "")):
@@ -85,10 +74,25 @@ async def login(request: LoginRequest):
                 detail="Invalid email or password"
             )
         
+        # Get name from role table
+        name = ""
+        try:
+            if request.role == "hod":
+                profile = supabase.table("hod").select("name").eq("id", user["id"]).execute()
+                name = profile.data[0]["name"] if profile.data else ""
+            elif request.role == "faculty":
+                profile = supabase.table("faculty").select("name").eq("id", user["id"]).execute()
+                name = profile.data[0]["name"] if profile.data else ""
+            elif request.role == "student":
+                profile = supabase.table("students").select("name").eq("id", user["id"]).execute()
+                name = profile.data[0]["name"] if profile.data else ""
+        except:
+            name = user.get("email", "").split("@")[0]
+        
         # Create access token
         token_data = {
-            "sub": user.get("id"),
-            "email": user.get("email"),
+            "sub": user["id"],
+            "email": user["email"],
             "role": request.role
         }
         access_token = create_access_token(token_data)
@@ -96,10 +100,10 @@ async def login(request: LoginRequest):
         return LoginResponse(
             access_token=access_token,
             user={
-                "id": user.get("id"),
-                "email": user.get("email"),
+                "id": user["id"],
+                "email": user["email"],
                 "role": request.role,
-                "name": user_data.get("name", "")
+                "name": name
             }
         )
         

@@ -1,9 +1,9 @@
 // ==========================================
-// MOCK API - Frontend testing without backend
+// API Service - Backend integration
 // ==========================================
 
 // Set to false to use real backend
-const USE_MOCK = true;
+const USE_MOCK = false;
 const API_BASE_URL = 'http://localhost:8000/api';
 
 // Helper to simulate API delay
@@ -48,17 +48,24 @@ const fetchWithAuth = async (url, options = {}) => {
         ...options.headers,
     };
 
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-        ...options,
-        headers,
-    });
+    try {
+        const response = await fetch(`${API_BASE_URL}${url}`, {
+            ...options,
+            headers,
+        });
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'An error occurred' }));
-        throw new Error(error.detail || 'Request failed');
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'An error occurred' }));
+            throw new Error(error.detail || 'Request failed');
+        }
+
+        return response.json();
+    } catch (error) {
+        if (error.message === 'Failed to fetch') {
+            throw new Error('Cannot connect to server. Make sure backend is running on http://localhost:8000');
+        }
+        throw error;
     }
-
-    return response.json();
 };
 
 // Auth API
@@ -208,6 +215,11 @@ export const facultyAPI = {
         const students = mockData.students.filter(s => s.class_year === classYear && s.section === section);
         return { students };
     },
+    getStudentsByBatch: async (classYear, section, batch = null) => {
+        const params = new URLSearchParams({ class_year: classYear, section });
+        if (batch) params.append('batch', batch);
+        return fetchWithAuth(`/faculty/students?${params}`);
+    },
 
     // Attendance
     markAttendance: async (data) => {
@@ -254,6 +266,64 @@ export const facultyAPI = {
         if (!USE_MOCK) return fetchWithAuth('/faculty/events');
         await delay(300);
         return { events: [...mockData.events] };
+    },
+
+    // Student Management
+    downloadStudentTemplate: async () => {
+        const token = getToken();
+        const response = await fetch(`${API_BASE_URL}/faculty/students/template`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to download template');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'student_template.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    },
+    uploadStudents: async (file, classYear, section, batch) => {
+        const token = getToken();
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('class_year', classYear);
+        formData.append('section', section);
+        formData.append('batch', batch);
+
+        const response = await fetch(`${API_BASE_URL}/faculty/students/upload`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+            throw new Error(error.detail);
+        }
+        return response.json();
+    },
+    getBatches: async (classYear = null, section = null) => {
+        const params = new URLSearchParams();
+        if (classYear) params.append('class_year', classYear);
+        if (section) params.append('section', section);
+        return fetchWithAuth(`/faculty/students/batches${params.toString() ? `?${params}` : ''}`);
+    },
+    getStudentsByBatch: async (classYear, section, batch = null) => {
+        const params = new URLSearchParams({ class_year: classYear, section });
+        if (batch) params.append('batch', batch);
+        return fetchWithAuth(`/faculty/students/by-batch?${params}`);
+    },
+    createStudent: async (data) => {
+        return fetchWithAuth('/faculty/students', { method: 'POST', body: JSON.stringify(data) });
+    },
+    updateStudent: async (id, data) => {
+        return fetchWithAuth(`/faculty/students/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    deleteStudent: async (id) => {
+        return fetchWithAuth(`/faculty/students/${id}`, { method: 'DELETE' });
     },
 };
 

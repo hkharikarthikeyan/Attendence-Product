@@ -32,8 +32,17 @@ const CalendarIcon = () => (
     </svg>
 );
 
+const UploadIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+);
+
 const menuItems = [
     { path: '/faculty', label: 'Dashboard', icon: <DashboardIcon />, end: true },
+    { path: '/faculty/students', label: 'Student Upload', icon: <UploadIcon /> },
     { path: '/faculty/attendance', label: 'Mark Attendance', icon: <CheckIcon /> },
     { path: '/faculty/marks', label: 'Enter Marks', icon: <EditIcon /> },
     { path: '/faculty/events', label: 'Events', icon: <CalendarIcon /> },
@@ -52,6 +61,7 @@ const FacultyDashboard = () => {
     const [profile, setProfile] = useState(null);
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         loadDashboardData();
@@ -59,14 +69,26 @@ const FacultyDashboard = () => {
 
     const loadDashboardData = async () => {
         try {
-            const [profileData, eventsData] = await Promise.all([
-                facultyAPI.getProfile(),
-                facultyAPI.getEvents(),
-            ]);
-            setProfile(profileData);
-            setEvents(eventsData.events?.slice(0, 5) || []);
+            // Load profile - handle error gracefully
+            try {
+                const profileData = await facultyAPI.getProfile();
+                setProfile(profileData);
+            } catch (err) {
+                console.error('Failed to load profile:', err);
+                setProfile({ name: 'Faculty' }); // Fallback
+            }
+
+            // Load events - handle error gracefully  
+            try {
+                const eventsData = await facultyAPI.getEvents();
+                setEvents(eventsData.events?.slice(0, 5) || []);
+            } catch (err) {
+                console.error('Failed to load events:', err);
+                setEvents([]);
+            }
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
+            setError('Failed to load some data. Please try again.');
         } finally {
             setLoading(false);
         }

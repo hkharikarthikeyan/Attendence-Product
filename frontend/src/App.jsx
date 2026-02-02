@@ -8,6 +8,7 @@ import EventsManagement from './pages/hod/EventsManagement';
 import { FacultyLayout, FacultyDashboard } from './pages/faculty/FacultyDashboard';
 import AttendanceEntry from './pages/faculty/AttendanceEntry';
 import MarksEntry from './pages/faculty/MarksEntry';
+import StudentUpload from './pages/faculty/StudentUpload';
 import { StudentLayout, StudentDashboard } from './pages/student/StudentDashboard';
 import StudentProfile from './pages/student/StudentProfile';
 import StudentAttendance from './pages/student/StudentAttendance';
@@ -72,6 +73,7 @@ const AppRoutes = () => {
         </ProtectedRoute>
       }>
         <Route index element={<FacultyDashboard />} />
+        <Route path="students" element={<StudentUpload />} />
         <Route path="attendance" element={<AttendanceEntry />} />
         <Route path="marks" element={<MarksEntry />} />
         <Route path="events" element={<StudentEvents />} />

@@ -71,6 +71,42 @@
     height: 16px;
 }
 
+.btn-info {
+    background: #0ea5e9;
+    color: white;
+}
+
+.btn-info:hover {
+    background: #0284c7;
+}
+
+.student-details {
+    display: grid;
+    gap: 1rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--bg-secondary, #f8fafc);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.detail-label {
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    min-width: 140px;
+}
+
+.detail-value {
+    color: var(--text-primary, #1e293b);
+    font-weight: 500;
+    text-align: right;
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

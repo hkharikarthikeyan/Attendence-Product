@@ -6,29 +6,53 @@ const AttendanceEntry = () => {
     const [classYear, setClassYear] = useState('');
     const [section, setSection] = useState('');
     const [subject, setSubject] = useState('');
+    const [batch, setBatch] = useState('');
+    const [batches, setBatches] = useState([]);
     const [students, setStudents] = useState([]);
     const [attendance, setAttendance] = useState({});
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState('');
     const [error, setError] = useState('');
 
+    // Load batches when class and section change
+    useEffect(() => {
+        if (classYear && section) {
+            loadBatches();
+        }
+    }, [classYear, section]);
+
+    const loadBatches = async () => {
+        try {
+            const data = await facultyAPI.getBatches(classYear, section);
+            setBatches(data.batches || []);
+        } catch (err) {
+            console.error('Failed to load batches:', err);
+        }
+    };
+
     const loadStudents = async () => {
         if (!classYear || !section) return;
         setLoading(true);
+        setError('');
         try {
-            const data = await facultyAPI.getStudents(classYear, section);
+            console.log('Loading students for:', { classYear, section, batch });
+            const data = batch
+                ? await facultyAPI.getStudentsByBatch(classYear, section, batch)
+                : await facultyAPI.getStudents(classYear, section);
+            console.log('Students loaded:', data);
             setStudents(data.students || []);
             const initialAttendance = {};
             data.students?.forEach(s => { initialAttendance[s.id] = 'present'; });
             setAttendance(initialAttendance);
         } catch (err) {
-            setError('Failed to load students');
+            console.error('Error loading students:', err);
+            setError('Failed to load students: ' + err.message);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { if (classYear && section) loadStudents(); }, [classYear, section]);
+    useEffect(() => { if (classYear && section) loadStudents(); }, [classYear, section, batch]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -109,19 +133,48 @@ const AttendanceEntry = () => {
                                 <option value="English">English</option>
                             </select>
                         </div>
+                        {batches.length > 0 && (
+                            <div className="form-group">
+                                <label className="form-label">Batch (Optional)</label>
+                                <select className="form-input form-select" value={batch}
+                                    onChange={(e) => setBatch(e.target.value)}>
+                                    <option value="">All Students</option>
+                                    {batches.map((b, i) => (
+                                        <option key={i} value={b.batch}>{b.batch} ({b.count})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <button 
+                            type="button" 
+                            className="btn btn-secondary"
+                            onClick={loadStudents}
+                        >
+                            Load Students
+                        </button>
                     </div>
 
                     {loading ? (
                         <div className="loading-container"><div className="spinner"></div></div>
                     ) : students.length > 0 ? (
-                        <form onSubmit={handleSubmit}>
+                        <>
+                            <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>Instructions:</h4>
+                                <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>
+                                    ✅ Check <strong style={{ color: '#22c55e' }}>Present</strong> for students who are in class<br/>
+                                    ❌ Check <strong style={{ color: '#ef4444' }}>Absent</strong> for students who are not in class
+                                </p>
+                            </div>
+                            <form onSubmit={handleSubmit}>
                             <div className="table-container">
                                 <table className="table">
                                     <thead>
                                         <tr>
                                             <th>Roll No</th>
                                             <th>Name</th>
-                                            <th>Status</th>
+                                            <th>Register No</th>
+                                            <th style={{ textAlign: 'center' }}>Present</th>
+                                            <th style={{ textAlign: 'center' }}>Absent</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -129,18 +182,32 @@ const AttendanceEntry = () => {
                                             <tr key={s.id}>
                                                 <td>{s.roll_number}</td>
                                                 <td>{s.name}</td>
-                                                <td>
-                                                    <div className="attendance-buttons">
-                                                        {['present', 'absent', 'late'].map(status => (
-                                                            <button key={status} type="button"
-                                                                className={`btn btn-sm ${attendance[s.id] === status ?
-                                                                    (status === 'present' ? 'btn-success' : status === 'absent' ? 'btn-danger' : 'btn-warning')
-                                                                    : 'btn-secondary'}`}
-                                                                onClick={() => setAttendance({ ...attendance, [s.id]: status })}>
-                                                                {status.charAt(0).toUpperCase() + status.slice(1)}
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                <td>{s.register_number}</td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={attendance[s.id] === 'present'}
+                                                        onChange={() => setAttendance({ ...attendance, [s.id]: 'present' })}
+                                                        style={{ 
+                                                            width: '20px', 
+                                                            height: '20px', 
+                                                            accentColor: '#22c55e',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={attendance[s.id] === 'absent'}
+                                                        onChange={() => setAttendance({ ...attendance, [s.id]: 'absent' })}
+                                                        style={{ 
+                                                            width: '20px', 
+                                                            height: '20px', 
+                                                            accentColor: '#ef4444',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    />
                                                 </td>
                                             </tr>
                                         ))}
@@ -152,7 +219,8 @@ const AttendanceEntry = () => {
                                     {loading ? 'Submitting...' : 'Submit Attendance'}
                                 </button>
                             </div>
-                        </form>
+                            </form>
+                        </>
                     ) : (
                         <p className="text-muted text-center">Select class and section to view students</p>
                     )}

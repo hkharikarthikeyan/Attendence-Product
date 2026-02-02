@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Union
 
 
 class Settings(BaseSettings):
@@ -17,7 +18,13 @@ class Settings(BaseSettings):
     
     # Application Settings
     APP_NAME: str = "Student Management System"
-    DEBUG: bool = True
+    DEBUG: Union[bool, str] = True
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Convert DEBUG string to boolean if needed
+        if isinstance(self.DEBUG, str):
+            self.DEBUG = self.DEBUG.lower() in ('true', '1', 'yes', 'on')
     
     class Config:
         env_file = ".env"

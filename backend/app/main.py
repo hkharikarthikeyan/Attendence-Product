@@ -16,7 +16,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and React defaults
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,11 +35,18 @@ async def root():
     return {
         "message": "Student Management System API",
         "version": "1.0.0",
-        "docs": "/api/docs"
+        "docs": "/api/docs",
+        "status": "running"
     }
 
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    try:
+        from .database import supabase
+        # Test database connection
+        supabase.table("students").select("id").limit(1).execute()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}

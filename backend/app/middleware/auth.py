@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from ..config import settings
 from ..database import supabase
 
@@ -55,7 +55,7 @@ async def get_current_user(
     return CurrentUser(id=user_id, email=email, role=role)
 
 
-def require_role(allowed_roles: list[str]):
+def require_role(allowed_roles: List[str]):
     """Dependency to check if user has required role."""
     async def role_checker(current_user: CurrentUser = Depends(get_current_user)):
         if current_user.role not in allowed_roles:

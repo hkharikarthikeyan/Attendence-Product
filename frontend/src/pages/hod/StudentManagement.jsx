@@ -6,6 +6,8 @@ const StudentManagement = () => {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [showViewModal, setShowViewModal] = useState(false);
+    const [viewingStudent, setViewingStudent] = useState(null);
     const [editingStudent, setEditingStudent] = useState(null);
     const [filters, setFilters] = useState({ class_year: '', section: '', batch: '' });
     const [formData, setFormData] = useState({
@@ -30,6 +32,16 @@ const StudentManagement = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const viewStudent = (student) => {
+        setViewingStudent(student);
+        setShowViewModal(true);
+    };
+
+    const closeViewModal = () => {
+        setShowViewModal(false);
+        setViewingStudent(null);
     };
 
     const handleSubmit = async (e) => {
@@ -179,6 +191,12 @@ const StudentManagement = () => {
                                     <td>{s.mobile || '-'}</td>
                                     <td>
                                         <div className="action-buttons">
+                                            <button className="btn btn-icon btn-info" onClick={() => viewStudent(s)} title="View">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                    <circle cx="12" cy="12" r="3" />
+                                                </svg>
+                                            </button>
                                             <button className="btn btn-icon btn-secondary" onClick={() => openModal(s)} title="Edit">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -294,6 +312,73 @@ const StudentManagement = () => {
                                 <button type="submit" className="btn btn-primary">{editingStudent ? 'Update' : 'Create'} Student</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {showViewModal && viewingStudent && (
+                <div className="modal-overlay" onClick={closeViewModal}>
+                    <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Student Details</h3>
+                            <button className="btn btn-icon" onClick={closeViewModal}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="student-details">
+                                <div className="detail-row">
+                                    <span className="detail-label">Name:</span>
+                                    <span className="detail-value">{viewingStudent.name}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Register Number:</span>
+                                    <span className="detail-value">{viewingStudent.register_number}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Roll Number:</span>
+                                    <span className="detail-value">{viewingStudent.roll_number}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Email:</span>
+                                    <span className="detail-value">{viewingStudent.email || 'Not provided'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Mobile:</span>
+                                    <span className="detail-value">{viewingStudent.mobile || 'Not provided'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Class/Year:</span>
+                                    <span className="detail-value">{viewingStudent.class_year || 'Not assigned'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Section:</span>
+                                    <span className="detail-value">{viewingStudent.section || 'Not assigned'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Batch:</span>
+                                    <span className="detail-value">{viewingStudent.batch || 'Not assigned'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Father's Name:</span>
+                                    <span className="detail-value">{viewingStudent.father_name || 'Not provided'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Mother's Name:</span>
+                                    <span className="detail-value">{viewingStudent.mother_name || 'Not provided'}</span>
+                                </div>
+                                <div className="detail-row">
+                                    <span className="detail-label">Created:</span>
+                                    <span className="detail-value">{new Date(viewingStudent.created_at).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={closeViewModal}>Close</button>
+                            <button className="btn btn-primary" onClick={() => { closeViewModal(); openModal(viewingStudent); }}>Edit Student</button>
+                        </div>
                     </div>
                 </div>
             )}
