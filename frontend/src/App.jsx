@@ -4,6 +4,7 @@ import Login from './pages/auth/LoginPage';
 import { HODLayout, HODDashboard } from './pages/hod/HODDashboard';
 import FacultyManagement from './pages/hod/FacultyManagement';
 import StudentManagement from './pages/hod/StudentManagement';
+import AttendanceView from './pages/hod/AttendanceView';
 import EventsManagement from './pages/hod/EventsManagement';
 import { FacultyLayout, FacultyDashboard } from './pages/faculty/FacultyDashboard';
 import AttendanceEntry from './pages/faculty/AttendanceEntry';
@@ -62,6 +63,7 @@ const AppRoutes = () => {
         <Route index element={<HODDashboard />} />
         <Route path="faculty" element={<FacultyManagement />} />
         <Route path="students" element={<StudentManagement />} />
+        <Route path="attendance" element={<AttendanceView />} />
         <Route path="events" element={<EventsManagement />} />
         <Route path="reports" element={<div className="management-page"><h1>Reports</h1><p>Coming soon...</p></div>} />
       </Route>

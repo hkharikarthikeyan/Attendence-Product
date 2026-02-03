@@ -52,7 +52,12 @@ const AttendanceEntry = () => {
         }
     };
 
-    useEffect(() => { if (classYear && section) loadStudents(); }, [classYear, section, batch]);
+    // Auto-load students when required fields are filled
+    useEffect(() => {
+        if (classYear && section && subject) {
+            loadStudents();
+        }
+    }, [classYear, section, subject, batch]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -149,8 +154,9 @@ const AttendanceEntry = () => {
                             type="button" 
                             className="btn btn-secondary"
                             onClick={loadStudents}
+                            disabled={!classYear || !section || !subject}
                         >
-                            Load Students
+                            Refresh Students
                         </button>
                     </div>
 

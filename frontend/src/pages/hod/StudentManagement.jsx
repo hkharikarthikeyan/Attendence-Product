@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { hodAPI } from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 import './FacultyManagement.css';
 
 const StudentManagement = () => {
+    const navigate = useNavigate();
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -26,7 +28,7 @@ const StudentManagement = () => {
                 Object.entries(filters).filter(([_, v]) => v)
             );
             const data = await hodAPI.getStudents(activeFilters);
-            setStudents(data);
+            setStudents(data.students || data);
         } catch (err) {
             setError('Failed to load students');
         } finally {
@@ -125,6 +127,12 @@ const StudentManagement = () => {
                         <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     Add Student
+                </button>
+                <button className="btn btn-info" onClick={() => navigate('/hod/attendance')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a2 2 0 1 1 4 0v2M9 11h6"/>
+                    </svg>
+                    View Attendance
                 </button>
             </header>
 

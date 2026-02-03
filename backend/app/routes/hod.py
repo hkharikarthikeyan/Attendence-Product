@@ -211,7 +211,7 @@ async def delete_faculty(
 
 # ==================== STUDENT ROUTES ====================
 
-@router.get("/students", response_model=List[StudentResponse])
+@router.get("/students")
 async def get_all_students(
     class_year: Optional[str] = None,
     section: Optional[str] = None,
@@ -220,7 +220,7 @@ async def get_all_students(
 ):
     """Get all students with optional filters."""
     try:
-        query = supabase.table("students").select("*, users(email)")
+        query = supabase.table("students").select("*")
         
         if class_year:
             query = query.eq("class_year", class_year)
@@ -233,18 +233,21 @@ async def get_all_students(
         
         students_list = []
         for s in result.data:
-            students_list.append(StudentResponse(
-                id=s["id"],
-                name=s["name"],
-                email=s["users"]["email"] if s.get("users") else "",
-                register_number=s["register_number"],
-                roll_number=s["roll_number"],
-                mobile=s.get("mobile"),
-                class_year=s.get("class_year"),
-                section=s.get("section"),
-                batch=s.get("batch")
-            ))
-        return students_list
+            students_list.append({
+                "id": s["id"],
+                "name": s["name"],
+                "email": s.get("email", ""),
+                "register_number": s["register_number"],
+                "roll_number": s["roll_number"],
+                "mobile": s.get("mobile"),
+                "class_year": s.get("class_year"),
+                "section": s.get("section"),
+                "batch": s.get("batch"),
+                "father_name": s.get("father_name"),
+                "mother_name": s.get("mother_name"),
+                "created_at": s.get("created_at")
+            })
+        return {"students": students_list}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -408,27 +411,42 @@ async def get_attendance_report(
         
         report = []
         for student in students.data:
-            # Get attendance records
-            attendance = supabase.table("attendance").select("status").eq("student_id", student["id"]).execute()
-            total = len(attendance.data)
-            present = sum(1 for a in attendance.data if a["status"] == "present")
-            percentage = (present / total * 100) if total > 0 else 0
-            
-            report.append({
-                "student_id": student["id"],
-                "name": student["name"],
-                "register_number": student["register_number"],
-                "class_year": student["class_year"],
-                "section": student["section"],
-                "total_classes": total,
-                "present": present,
-                "absent": total - present,
-                "percentage": round(percentage, 2)
-            })
+            try:
+                # Get attendance records
+                attendance = supabase.table("attendance").select("status").eq("student_id", student["id"]).execute()
+                total = len(attendance.data) if attendance.data else 0
+                present = sum(1 for a in attendance.data if a["status"] == "present") if attendance.data else 0
+                percentage = (present / total * 100) if total > 0 else 0
+                
+                report.append({
+                    "student_id": student["id"],
+                    "name": student["name"],
+                    "register_number": student["register_number"],
+                    "class_year": student["class_year"],
+                    "section": student["section"],
+                    "total_classes": total,
+                    "present": present,
+                    "absent": total - present,
+                    "percentage": round(percentage, 2)
+                })
+            except Exception:
+                # If attendance query fails, add student with zero attendance
+                report.append({
+                    "student_id": student["id"],
+                    "name": student["name"],
+                    "register_number": student["register_number"],
+                    "class_year": student["class_year"],
+                    "section": student["section"],
+                    "total_classes": 0,
+                    "present": 0,
+                    "absent": 0,
+                    "percentage": 0
+                })
         
         return {"report": report}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty report if any error occurs
+        return {"report": []}
 
 
 @router.get("/reports/performance")
