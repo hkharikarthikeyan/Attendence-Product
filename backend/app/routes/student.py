@@ -62,6 +62,7 @@ async def request_profile_update(
     try:
         data = {
             "name": request.name,
+            "email": current_user.email, # Ensure email is stored/updated
             "roll_number": request.roll_number,
             "register_number": request.register_number,
             "class_year": request.class_year,
