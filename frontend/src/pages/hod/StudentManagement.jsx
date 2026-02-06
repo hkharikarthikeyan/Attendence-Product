@@ -20,6 +20,8 @@ const StudentManagement = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+
     useEffect(() => { loadStudents(); }, [filters]);
 
     const loadStudents = async () => {
@@ -35,6 +37,30 @@ const StudentManagement = () => {
             setLoading(false);
         }
     };
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedStudents = [...students].sort((a, b) => {
+        if (!a[sortConfig.key]) return 1;
+        if (!b[sortConfig.key]) return -1;
+
+        const aValue = a[sortConfig.key].toString().toLowerCase();
+        const bValue = b[sortConfig.key].toString().toLowerCase();
+
+        if (aValue < bValue) {
+            return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+            return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
 
     const viewStudent = (student) => {
         setViewingStudent(student);
@@ -130,7 +156,7 @@ const StudentManagement = () => {
                 </button>
                 <button className="btn btn-info" onClick={() => navigate('/hod/attendance')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a2 2 0 1 1 4 0v2M9 11h6"/>
+                        <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a2 2 0 1 1 4 0v2M9 11h6" />
                     </svg>
                     View Attendance
                 </button>
@@ -173,18 +199,28 @@ const StudentManagement = () => {
                 <table className="table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Register No</th>
-                            <th>Roll No</th>
-                            <th>Class</th>
-                            <th>Section</th>
+                            <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                                Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('register_number')} style={{ cursor: 'pointer' }}>
+                                Register No {sortConfig.key === 'register_number' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('roll_number')} style={{ cursor: 'pointer' }}>
+                                Roll No {sortConfig.key === 'roll_number' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('class_year')} style={{ cursor: 'pointer' }}>
+                                Class {sortConfig.key === 'class_year' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('section')} style={{ cursor: 'pointer' }}>
+                                Section {sortConfig.key === 'section' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
                             <th>Mobile</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {students.length > 0 ? (
-                            students.map((s) => (
+                        {sortedStudents.length > 0 ? (
+                            sortedStudents.map((s) => (
                                 <tr key={s.id}>
                                     <td>
                                         <div className="user-cell">

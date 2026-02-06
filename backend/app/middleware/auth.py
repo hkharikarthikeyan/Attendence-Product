@@ -59,6 +59,7 @@ def require_role(allowed_roles: List[str]):
     """Dependency to check if user has required role."""
     async def role_checker(current_user: CurrentUser = Depends(get_current_user)):
         if current_user.role not in allowed_roles:
+            print(f"DEBUG: Access denied. User role: '{current_user.role}' (type: {type(current_user.role)}), Required: {allowed_roles}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {allowed_roles}"
