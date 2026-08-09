@@ -300,6 +300,27 @@ CREATE TABLE IF NOT EXISTS public.password_history (
 );
 
 -- ==========================================
+-- 21. LEAVE REQUESTS
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.leave_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('faculty', 'student')),
+    leave_type VARCHAR(20) NOT NULL CHECK (leave_type IN ('od', 'medical', 'personal', 'permission', 'casual', 'sick')),
+    from_date DATE NOT NULL,
+    to_date DATE NOT NULL,
+    reason TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    rejection_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_leave_requests_user ON public.leave_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON public.leave_requests(status);
+
+-- ==========================================
 -- RLS CONFIGURATION
 -- ==========================================
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
@@ -322,6 +343,7 @@ ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.login_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.password_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass policies
 CREATE POLICY "Allow all for service role" ON public.roles FOR ALL USING (true);
@@ -344,6 +366,7 @@ CREATE POLICY "Allow all for service role" ON public.activity_logs FOR ALL USING
 CREATE POLICY "Allow all for service role" ON public.settings FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.login_history FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.password_history FOR ALL USING (true);
+CREATE POLICY "Allow all for service role" ON public.leave_requests FOR ALL USING (true);
 
 -- Insert Roles
 INSERT INTO public.roles (name, description) VALUES
