@@ -128,11 +128,22 @@ async def create_faculty(
 ):
     """Create a new faculty member."""
     try:
+        import uuid
+        # Fetch role_id
+        role_res = supabase.table("roles").select("id").eq("name", "faculty").execute()
+        if not role_res.data:
+            raise HTTPException(status_code=500, detail="Faculty role not configured in database")
+        role_id = role_res.data[0]["id"]
+        
+        # Generate username
+        username = f"fac_{uuid.uuid4().hex[:8]}"
+
         # Create user record first
         user_result = supabase.table("users").insert({
             "email": faculty.email,
+            "username": username,
             "password_hash": get_password_hash(faculty.password),
-            "role": "faculty"
+            "role_id": role_id
         }).execute()
         
         user_id = user_result.data[0]["id"]
@@ -143,8 +154,7 @@ async def create_faculty(
             "name": faculty.name,
             "employee_id": faculty.employee_id,
             "mobile": faculty.mobile,
-            "department": faculty.department,
-            "availability_status": True
+            "department_id": None # Set default to None or insert department if exists
         }).execute()
         
         return FacultyResponse(
@@ -157,6 +167,8 @@ async def create_faculty(
             availability_status=True
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -259,11 +271,22 @@ async def create_student(
 ):
     """Create a new student."""
     try:
+        import uuid
+        # Fetch role_id
+        role_res = supabase.table("roles").select("id").eq("name", "student").execute()
+        if not role_res.data:
+            raise HTTPException(status_code=500, detail="Student role not configured in database")
+        role_id = role_res.data[0]["id"]
+        
+        # Generate username
+        username = f"std_{uuid.uuid4().hex[:8]}"
+
         # Create user record first
         user_result = supabase.table("users").insert({
             "email": student.email,
+            "username": username,
             "password_hash": get_password_hash(student.password),
-            "role": "student"
+            "role_id": role_id
         }).execute()
         
         user_id = user_result.data[0]["id"]
@@ -277,9 +300,7 @@ async def create_student(
             "mobile": student.mobile,
             "father_name": student.father_name,
             "mother_name": student.mother_name,
-            "class_year": student.class_year,
-            "section": student.section,
-            "batch": student.batch
+            "class_id": None
         }).execute()
         
         return StudentResponse(

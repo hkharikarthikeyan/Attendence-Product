@@ -35,6 +35,22 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
 
 -- ==========================================
+-- 2.5 HOD
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.hod (
+    id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    employee_id VARCHAR(50) UNIQUE NOT NULL,
+    mobile VARCHAR(20),
+    department VARCHAR(150),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_hod_employee_id ON public.hod(employee_id);
+
+-- ==========================================
 -- 3. DEPARTMENTS
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.departments (
@@ -344,6 +360,7 @@ ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.login_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.password_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hod ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass policies
 CREATE POLICY "Allow all for service role" ON public.roles FOR ALL USING (true);
@@ -367,6 +384,7 @@ CREATE POLICY "Allow all for service role" ON public.settings FOR ALL USING (tru
 CREATE POLICY "Allow all for service role" ON public.login_history FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.password_history FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.leave_requests FOR ALL USING (true);
+CREATE POLICY "Allow all for service role" ON public.hod FOR ALL USING (true);
 
 -- Insert Roles
 INSERT INTO public.roles (name, description) VALUES
@@ -374,3 +392,35 @@ INSERT INTO public.roles (name, description) VALUES
 ('faculty', 'Faculty Member - Academic and Attendance Administrator'),
 ('student', 'Student - Portal View and Assignment Submission')
 ON CONFLICT (name) DO NOTHING;
+
+-- Seed HOD User (Email: Hod@mahendra.edu, Password: Hod@1212)
+DO $$
+DECLARE
+    v_role_id UUID;
+    v_user_id UUID := '11111111-1111-1111-1111-111111111111';
+BEGIN
+    -- Get HOD role ID
+    SELECT id INTO v_role_id FROM public.roles WHERE name = 'hod';
+    
+    -- Insert HOD user record
+    INSERT INTO public.users (id, email, username, password_hash, role_id, first_login)
+    VALUES (
+        v_user_id,
+        'Hod@mahendra.edu',
+        'hod_admin',
+        '$2b$12$O23x67BPrOQ.4FoS0mSng.Dn9mAbk9F1P9pb10/Ig3a4AMgAsx.bC',
+        v_role_id,
+        FALSE
+    )
+    ON CONFLICT (email) DO NOTHING;
+
+    -- Insert HOD profile
+    INSERT INTO public.hod (id, name, employee_id, department)
+    VALUES (
+        v_user_id,
+        'Dr. Mahendra Admin',
+        'HOD001',
+        'Computer Science'
+    )
+    ON CONFLICT (id) DO NOTHING;
+END $$;
