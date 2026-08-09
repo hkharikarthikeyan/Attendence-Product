@@ -6,21 +6,26 @@ const EventsManagement = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [editingEvent, setEditingEvent] = useState(null);
     const [formData, setFormData] = useState({
         title: '', description: '', event_date: '', event_type: 'general',
     });
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    useEffect(() => { loadEvents(); }, []);
+    useEffect(() => { 
+        loadEvents();
+        const interval = setInterval(loadEvents, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     const loadEvents = async () => {
         try {
             const data = await hodAPI.getEvents();
             setEvents(data);
+            setLoading(false);
         } catch (err) {
             setError('Failed to load events');
-        } finally {
             setLoading(false);
         }
     };
@@ -29,15 +34,23 @@ const EventsManagement = () => {
         e.preventDefault();
         setError('');
         try {
-            await hodAPI.createEvent({
-                ...formData,
-                event_date: new Date(formData.event_date).toISOString(),
-            });
-            setSuccess('Event created successfully');
+            if (editingEvent) {
+                await hodAPI.updateEvent(editingEvent.id, {
+                    ...formData,
+                    event_date: new Date(formData.event_date).toISOString(),
+                });
+                setSuccess('Event updated successfully');
+            } else {
+                await hodAPI.createEvent({
+                    ...formData,
+                    event_date: new Date(formData.event_date).toISOString(),
+                });
+                setSuccess('Event created successfully');
+            }
             loadEvents();
             closeModal();
         } catch (err) {
-            setError(err.message || 'Failed to create event');
+            setError(err.message || 'Failed to save event');
         }
     };
 
@@ -52,9 +65,30 @@ const EventsManagement = () => {
         }
     };
 
+    const openModal = (event = null) => {
+        if (event) {
+            setEditingEvent(event);
+            setFormData({
+                title: event.title,
+                description: event.description,
+                event_date: new Date(event.event_date).toISOString().slice(0, 16),
+                event_type: event.event_type
+            });
+        } else {
+            setEditingEvent(null);
+            setFormData({ title: '', description: '', event_date: '', event_type: 'general' });
+        }
+        setShowModal(true);
+    };
+
     const closeModal = () => {
         setShowModal(false);
+        setEditingEvent(null);
         setFormData({ title: '', description: '', event_date: '', event_type: 'general' });
+    };
+
+    const isEventCompleted = (eventDate) => {
+        return new Date(eventDate) < new Date();
     };
 
     useEffect(() => {
@@ -89,7 +123,7 @@ const EventsManagement = () => {
                     <h1>Events Management</h1>
                     <p>Create and manage department events</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                <button className="btn btn-primary" onClick={() => openModal()}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
@@ -108,16 +142,30 @@ const EventsManagement = () => {
                                 <span className={`badge ${getEventTypeColor(event.event_type)}`}>
                                     {event.event_type}
                                 </span>
-                                <button
-                                    className="btn btn-icon btn-danger"
-                                    onClick={() => handleDelete(event.id)}
-                                    title="Delete"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <polyline points="3 6 5 6 21 6" />
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                    </svg>
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        className="btn btn-icon btn-secondary"
+                                        onClick={() => openModal(event)}
+                                        title="Edit"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        className="btn btn-icon btn-danger"
+                                        onClick={() => handleDelete(event.id)}
+                                        title="Delete"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                            <line x1="10" y1="11" x2="10" y2="17" />
+                                            <line x1="14" y1="11" x2="14" y2="17" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                             <h3>{event.title}</h3>
                             <p className="event-description">{event.description}</p>
@@ -131,6 +179,9 @@ const EventsManagement = () => {
                                 <span>{new Date(event.event_date).toLocaleDateString('en-US', {
                                     weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
                                 })}</span>
+                                {isEventCompleted(event.event_date) && (
+                                    <span className="badge" style={{ background: '#6b7280', marginLeft: '0.5rem' }}>Completed</span>
+                                )}
                             </div>
                         </div>
                     ))
@@ -151,7 +202,7 @@ const EventsManagement = () => {
                 <div className="modal-overlay" onClick={closeModal}>
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Create New Event</h3>
+                            <h3>{editingEvent ? 'Edit Event' : 'Create New Event'}</h3>
                             <button className="btn btn-icon" onClick={closeModal}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -190,7 +241,7 @@ const EventsManagement = () => {
                             </div>
                             <div className="modal-footer">
                                 <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
-                                <button type="submit" className="btn btn-primary">Create Event</button>
+                                <button type="submit" className="btn btn-primary">{editingEvent ? 'Update' : 'Create'} Event</button>
                             </div>
                         </form>
                     </div>

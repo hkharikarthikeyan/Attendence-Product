@@ -45,6 +45,8 @@ const menuItems = [
     { path: '/student/profile', label: 'My Profile', icon: <UserIcon /> },
     { path: '/student/attendance', label: 'Attendance', icon: <CheckIcon /> },
     { path: '/student/marks', label: 'Marks', icon: <FileIcon /> },
+    { path: '/student/assignments', label: 'My Assignments', icon: <FileIcon /> },
+    { path: '/student/projects', label: 'My Projects', icon: <FileIcon /> },
     { path: '/student/events', label: 'Events', icon: <CalendarIcon /> },
 ];
 

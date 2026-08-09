@@ -377,6 +377,31 @@ async def create_event(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/events/{event_id}")
+async def update_event(
+    event_id: str,
+    event: EventCreate,
+    current_user: CurrentUser = Depends(require_hod)
+):
+    """Update an event."""
+    try:
+        result = supabase.table("events").update({
+            "title": event.title,
+            "description": event.description,
+            "event_date": event.event_date.isoformat(),
+            "event_type": event.event_type
+        }).eq("id", event_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        return {"message": "Event updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/events/{event_id}")
 async def delete_event(
     event_id: str,
@@ -487,5 +512,50 @@ async def get_performance_report(
             })
         
         return {"report": report}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== LEAVE MANAGEMENT ROUTES ====================
+
+@router.get("/faculty-leaves")
+async def get_faculty_leaves(current_user: CurrentUser = Depends(require_hod)):
+    """Get all faculty leave requests."""
+    try:
+        # Get leave requests
+        result = supabase.table("leave_requests").select("*").eq("role", "faculty").order("created_at", desc=True).execute()
+        
+        # Enrich with faculty details
+        requests = []
+        for leave in result.data:
+            faculty_data = supabase.table("faculty").select("name, employee_id").eq("id", leave["user_id"]).execute()
+            leave["faculty"] = faculty_data.data[0] if faculty_data.data else {"name": "Unknown", "employee_id": "N/A"}
+            requests.append(leave)
+        
+        return {"requests": requests}
+    except Exception as e:
+        print(f"Error fetching faculty leaves: {str(e)}")
+        return {"requests": []}
+
+
+@router.put("/faculty-leaves/{request_id}")
+async def update_faculty_leave(
+    request_id: str,
+    status_update: dict,
+    current_user: CurrentUser = Depends(require_hod)
+):
+    """Approve or reject faculty leave request."""
+    try:
+        result = supabase.table("leave_requests").update({
+            "status": status_update.get("status"),
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", request_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        return {"message": f"Leave request {status_update.get('status')}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
