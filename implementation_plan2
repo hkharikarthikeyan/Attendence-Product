@@ -1,0 +1,37 @@
+# Implementation Plan - Student Management System (SMS)
+
+This plan outlines the architecture, database schema, and implementation strategy for the complete Student Management System (SMS).
+
+## Proposed Architecture (Clean Architecture)
+
+- **Presentation Layer**: React components leveraging the existing design system.
+- **API Layer**: FastAPI/Flask router endpoints (`/api/v1`) with role-based routing and validations.
+- **Business/Service Layer**: Python classes handling login rules, duplicate student checks, attendance policies, and notifications.
+- **Repository/Database Layer**: Direct interactions with Supabase PostgreSQL via the client interface.
+
+## User Review Required
+
+> [!IMPORTANT]
+> The database schema includes audit columns (`created_at`, `updated_at`, `deleted_at`) across all tables. Soft deletes will be supported where appropriate by filtering on `deleted_at IS NULL`.
+> 
+> A robust Role-Based Access Control (RBAC) is implemented using `roles` and user-role relations.
+
+## Modules to Implement
+
+We will implement all modules defined in your prompt:
+1. **Authentication**: Login, Logout, Refresh Token, Reset Password, First Login Password Change, Account Lock, Password Expiry.
+2. **HOD Module**: Faculty management, student bulk import, dashboard analytics, announcements, academic reports.
+3. **Faculty Module**: Dashboard, attendance management (daily/history), marks entry (internal/external), assignment tracking/evaluation.
+4. **Student Module**: Dashboard, profile, attendance logs, marks, assignment upload, project deadlines.
+5. **Project Management**: Guide allocation, team creations, progress tracking.
+6. **Academic Structure**: Departments, classes, sections, subjects.
+7. **Reports**: Exports (PDF, Excel, CSV) for attendance and performance.
+
+## Verification Plan
+
+### Automated Tests
+- Pytest for database models and relationships.
+
+### Manual Verification
+- Execute schema queries in Supabase SQL editor.
+- Verify table creation, indexes, and constraints.

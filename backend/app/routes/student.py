@@ -217,9 +217,9 @@ async def get_events(current_user: CurrentUser = Depends(require_student)):
     """Get all events for student to view."""
     try:
         result = supabase.table("events").select("*").order("event_date", desc=True).execute()
-        return {"events": result.data}
+        return {"events": result.data if result.data else []}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"events": []}
 
 
 # ==================== DASHBOARD SUMMARY ====================

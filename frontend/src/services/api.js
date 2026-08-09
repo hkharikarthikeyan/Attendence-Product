@@ -3,7 +3,7 @@
 // ==========================================
 
 // Set to false to use real backend
-const USE_MOCK = false;
+const USE_MOCK = true;
 const API_BASE_URL = 'http://localhost:8000/api';
 
 // Helper to simulate API delay
@@ -165,6 +165,13 @@ export const hodAPI = {
         mockData.events.push(newEvent);
         return newEvent;
     },
+    updateEvent: async (id, data) => {
+        if (!USE_MOCK) return fetchWithAuth(`/hod/events/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+        await delay(300);
+        const index = mockData.events.findIndex(e => e.id === id);
+        if (index >= 0) mockData.events[index] = { ...mockData.events[index], ...data };
+        return mockData.events[index];
+    },
     deleteEvent: async (id) => {
         if (!USE_MOCK) return fetchWithAuth(`/hod/events/${id}`, { method: 'DELETE' });
         await delay(300);
@@ -179,7 +186,13 @@ export const hodAPI = {
             return fetchWithAuth(`/hod/reports/attendance${params ? `?${params}` : ''}`);
         }
         await delay(400);
-        return { report: 'Attendance Report', data: [] };
+        return {
+            report: [
+                { student_id: '1', name: 'Alex Johnson', register_number: 'REG2024001', total_classes: 40, present: 36, absent: 4, percentage: 90 },
+                { student_id: '2', name: 'Emma Davis', register_number: 'REG2024002', total_classes: 40, present: 28, absent: 12, percentage: 70 },
+                { student_id: '3', name: 'Ryan Smith', register_number: 'REG2024003', total_classes: 40, present: 38, absent: 2, percentage: 95 }
+            ]
+        };
     },
     getPerformanceReport: async (filters = {}) => {
         if (!USE_MOCK) {
@@ -187,7 +200,20 @@ export const hodAPI = {
             return fetchWithAuth(`/hod/reports/performance${params ? `?${params}` : ''}`);
         }
         await delay(400);
-        return { report: 'Performance Report', data: [] };
+        return {
+            report: [
+                { student_id: '1', name: 'Alex Johnson', register_number: 'REG2024001', total_marks: 450, max_marks: 500, percentage: 90 },
+                { student_id: '2', name: 'Emma Davis', register_number: 'REG2024002', total_marks: 380, max_marks: 500, percentage: 76 }
+            ]
+        };
+    },
+
+    // Leave Management
+    getFacultyLeaves: async () => {
+        return fetchWithAuth('/hod/faculty-leaves');
+    },
+    updateLeaveStatus: async (id, data) => {
+        return fetchWithAuth(`/hod/faculty-leaves/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 };
 
@@ -324,6 +350,14 @@ export const facultyAPI = {
     },
     deleteStudent: async (id) => {
         return fetchWithAuth(`/faculty/students/${id}`, { method: 'DELETE' });
+    },
+
+    // Leave Requests
+    applyLeave: async (data) => {
+        return fetchWithAuth('/faculty/my-leaves', { method: 'POST', body: JSON.stringify(data) });
+    },
+    getLeaves: async () => {
+        return fetchWithAuth('/faculty/my-leaves');
     },
 };
 

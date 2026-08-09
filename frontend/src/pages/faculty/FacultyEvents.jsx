@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { studentAPI } from '../../services/api';
+import { facultyAPI } from '../../services/api';
 import '../hod/FacultyManagement.css';
 
-const StudentEvents = () => {
+const FacultyEvents = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -12,7 +12,7 @@ const StudentEvents = () => {
 
     const loadEvents = async () => {
         try {
-            const data = await studentAPI.getEvents();
+            const data = await facultyAPI.getEvents();
             setEvents(data.events || []);
         } catch (error) {
             console.error('Failed to load events:', error);
@@ -88,4 +88,4 @@ const StudentEvents = () => {
     );
 };
 
-export default StudentEvents;
+export default FacultyEvents;
