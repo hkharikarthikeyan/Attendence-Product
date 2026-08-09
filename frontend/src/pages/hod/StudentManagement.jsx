@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { hodAPI } from '../../services/api';
+import { useState, useEffect, useRef } from 'react';
+import { hodAPI, facultyAPI } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import './FacultyManagement.css';
 
@@ -8,6 +8,7 @@ const StudentManagement = () => {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [showBulkModal, setShowBulkModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [viewingStudent, setViewingStudent] = useState(null);
     const [editingStudent, setEditingStudent] = useState(null);
@@ -17,8 +18,19 @@ const StudentManagement = () => {
         roll_number: '', mobile: '', father_name: '', mother_name: '',
         class_year: '', section: '', batch: '',
     });
+    
+    // Bulk upload states
+    const [classYear, setClassYear] = useState('');
+    const [section, setSection] = useState('');
+    const [batch, setBatch] = useState('');
+    const [file, setFile] = useState(null);
+    const [dragActive, setDragActive] = useState(false);
+    const fileInputRef = useRef(null);
+
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
     useEffect(() => { loadStudents(); }, [filters]);
 
@@ -35,6 +47,30 @@ const StudentManagement = () => {
             setLoading(false);
         }
     };
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedStudents = [...students].sort((a, b) => {
+        if (!a[sortConfig.key]) return 1;
+        if (!b[sortConfig.key]) return -1;
+
+        const aValue = a[sortConfig.key].toString().toLowerCase();
+        const bValue = b[sortConfig.key].toString().toLowerCase();
+
+        if (aValue < bValue) {
+            return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+            return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
 
     const viewStudent = (student) => {
         setViewingStudent(student);
@@ -99,6 +135,75 @@ const StudentManagement = () => {
         setEditingStudent(null);
     };
 
+    const closeBulkModal = () => {
+        setShowBulkModal(false);
+        setFile(null);
+        setClassYear('');
+        setSection('');
+        setBatch('');
+    };
+
+    const handleDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === 'dragenter' || e.type === 'dragover') {
+            setDragActive(true);
+        } else if (e.type === 'dragleave') {
+            setDragActive(false);
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+        if (e.dataTransfer.files?.[0]) {
+            const droppedFile = e.dataTransfer.files[0];
+            if (droppedFile.name.endsWith('.xlsx') || droppedFile.name.endsWith('.xls')) {
+                setFile(droppedFile);
+                setError('');
+            } else {
+                setError('Please upload an Excel file (.xlsx or .xls)');
+            }
+        }
+    };
+
+    const handleFileSelect = (e) => {
+        if (e.target.files?.[0]) {
+            setFile(e.target.files[0]);
+            setError('');
+        }
+    };
+
+    const handleDownloadTemplate = async () => {
+        try {
+            await facultyAPI.downloadStudentTemplate();
+        } catch (err) {
+            setError('Failed to download template');
+        }
+    };
+
+    const handleBulkUpload = async (e) => {
+        e.preventDefault();
+        if (!file || !classYear || !section || !batch) {
+            setError('Please fill all fields and select a file');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        try {
+            const result = await facultyAPI.uploadStudents(file, classYear, section, batch);
+            setSuccess(`Successfully uploaded ${result.count} students`);
+            closeBulkModal();
+            loadStudents();
+        } catch (err) {
+            setError(err.message || 'Upload failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (success) {
             const timer = setTimeout(() => setSuccess(''), 3000);
@@ -128,9 +233,17 @@ const StudentManagement = () => {
                     </svg>
                     Add Student
                 </button>
+                <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '18px', height: '18px' }}>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    Bulk Excel Import
+                </button>
                 <button className="btn btn-info" onClick={() => navigate('/hod/attendance')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a2 2 0 1 1 4 0v2M9 11h6"/>
+                        <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4M9 11V9a2 2 0 1 1 4 0v2M9 11h6" />
                     </svg>
                     View Attendance
                 </button>
@@ -173,18 +286,28 @@ const StudentManagement = () => {
                 <table className="table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Register No</th>
-                            <th>Roll No</th>
-                            <th>Class</th>
-                            <th>Section</th>
+                            <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                                Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('register_number')} style={{ cursor: 'pointer' }}>
+                                Register No {sortConfig.key === 'register_number' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('roll_number')} style={{ cursor: 'pointer' }}>
+                                Roll No {sortConfig.key === 'roll_number' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('class_year')} style={{ cursor: 'pointer' }}>
+                                Class {sortConfig.key === 'class_year' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('section')} style={{ cursor: 'pointer' }}>
+                                Section {sortConfig.key === 'section' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
                             <th>Mobile</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {students.length > 0 ? (
-                            students.map((s) => (
+                        {sortedStudents.length > 0 ? (
+                            sortedStudents.map((s) => (
                                 <tr key={s.id}>
                                     <td>
                                         <div className="user-cell">
@@ -387,6 +510,118 @@ const StudentManagement = () => {
                             <button className="btn btn-secondary" onClick={closeViewModal}>Close</button>
                             <button className="btn btn-primary" onClick={() => { closeViewModal(); openModal(viewingStudent); }}>Edit Student</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showBulkModal && (
+                <div className="modal-overlay" onClick={closeBulkModal}>
+                    <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Bulk Excel Import</h3>
+                            <button className="btn btn-icon" onClick={closeBulkModal}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleBulkUpload}>
+                            <div className="modal-body">
+                                <div className="filters-bar" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Class/Year *</label>
+                                        <select className="form-input form-select" value={classYear}
+                                            onChange={(e) => setClassYear(e.target.value)} required>
+                                            <option value="">Select</option>
+                                            <option value="1st Year">1st Year</option>
+                                            <option value="2nd Year">2nd Year</option>
+                                            <option value="3rd Year">3rd Year</option>
+                                            <option value="4th Year">4th Year</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Section *</label>
+                                        <select className="form-input form-select" value={section}
+                                            onChange={(e) => setSection(e.target.value)} required>
+                                            <option value="">Select</option>
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="C">C</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                                    <label className="form-label">Batch Name *</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={batch}
+                                        onChange={(e) => setBatch(e.target.value)}
+                                        placeholder="e.g., 2022-2026"
+                                        required
+                                    />
+                                </div>
+
+                                <div
+                                    className={`upload-zone ${dragActive ? 'drag-active' : ''} ${file ? 'has-file' : ''}`}
+                                    onDragEnter={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDrop={handleDrop}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    style={{
+                                        border: '2px dashed #cbd5e1',
+                                        borderRadius: '12px',
+                                        padding: '2.5rem',
+                                        textAlign: 'center',
+                                        cursor: 'pointer',
+                                        backgroundColor: dragActive ? '#f1f5f9' : file ? '#f0fdf4' : '#fff',
+                                        transition: 'all 0.2s ease',
+                                        marginBottom: '1.5rem'
+                                    }}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        onChange={handleFileSelect}
+                                        style={{ display: 'none' }}
+                                    />
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ width: '40px', height: '40px', margin: '0 auto' }}>
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                            <polyline points="17 8 12 3 7 8" />
+                                            <line x1="12" y1="3" x2="12" y2="15" />
+                                        </svg>
+                                    </div>
+                                    {file ? (
+                                        <p style={{ color: '#16a34a', fontWeight: 600 }}>
+                                            📄 {file.name}
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <p style={{ fontWeight: 600, color: '#334155' }}>Drag & drop Excel file here</p>
+                                            <p style={{ color: '#64748b', fontSize: '0.875rem' }}>or click to browse</p>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <button type="button" className="btn btn-secondary" onClick={handleDownloadTemplate} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}>
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="7 10 12 15 17 10" />
+                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                    </svg>
+                                    Download Template
+                                </button>
+                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                    <button type="button" className="btn btn-secondary" onClick={closeBulkModal}>Cancel</button>
+                                    <button type="submit" className="btn btn-primary" disabled={!file}>Upload Excel</button>
+                                </div>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

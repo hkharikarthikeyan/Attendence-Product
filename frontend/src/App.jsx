@@ -6,15 +6,26 @@ import FacultyManagement from './pages/hod/FacultyManagement';
 import StudentManagement from './pages/hod/StudentManagement';
 import AttendanceView from './pages/hod/AttendanceView';
 import EventsManagement from './pages/hod/EventsManagement';
+import LeaveApproval from './pages/hod/LeaveApproval';
+import HODAssignments from './pages/hod/HODAssignments';
+import HODProjects from './pages/hod/HODProjects';
+
 import { FacultyLayout, FacultyDashboard } from './pages/faculty/FacultyDashboard';
 import AttendanceEntry from './pages/faculty/AttendanceEntry';
 import MarksEntry from './pages/faculty/MarksEntry';
 import StudentUpload from './pages/faculty/StudentUpload';
+import FacultyEvents from './pages/faculty/FacultyEvents';
+import LeaveRequest from './pages/faculty/LeaveRequest';
+import FacultySubmissions from './pages/faculty/FacultySubmissions';
+import FacultyProjects from './pages/faculty/FacultyProjects';
+
 import { StudentLayout, StudentDashboard } from './pages/student/StudentDashboard';
 import StudentProfile from './pages/student/StudentProfile';
 import StudentAttendance from './pages/student/StudentAttendance';
 import StudentMarks from './pages/student/StudentMarks';
 import StudentEvents from './pages/student/StudentEvents';
+import StudentAssignments from './pages/student/StudentAssignments';
+import StudentProjects from './pages/student/StudentProjects';
 import './index.css';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -63,8 +74,11 @@ const AppRoutes = () => {
         <Route index element={<HODDashboard />} />
         <Route path="faculty" element={<FacultyManagement />} />
         <Route path="students" element={<StudentManagement />} />
+        <Route path="assignments" element={<HODAssignments />} />
+        <Route path="projects" element={<HODProjects />} />
         <Route path="attendance" element={<AttendanceView />} />
         <Route path="events" element={<EventsManagement />} />
+        <Route path="leaves" element={<LeaveApproval />} />
         <Route path="reports" element={<div className="management-page"><h1>Reports</h1><p>Coming soon...</p></div>} />
       </Route>
 
@@ -78,7 +92,10 @@ const AppRoutes = () => {
         <Route path="students" element={<StudentUpload />} />
         <Route path="attendance" element={<AttendanceEntry />} />
         <Route path="marks" element={<MarksEntry />} />
-        <Route path="events" element={<StudentEvents />} />
+        <Route path="submissions" element={<FacultySubmissions />} />
+        <Route path="projects" element={<FacultyProjects />} />
+        <Route path="events" element={<FacultyEvents />} />
+        <Route path="leave" element={<LeaveRequest />} />
       </Route>
 
       {/* Student Routes */}
@@ -91,6 +108,8 @@ const AppRoutes = () => {
         <Route path="profile" element={<StudentProfile />} />
         <Route path="attendance" element={<StudentAttendance />} />
         <Route path="marks" element={<StudentMarks />} />
+        <Route path="assignments" element={<StudentAssignments />} />
+        <Route path="projects" element={<StudentProjects />} />
         <Route path="events" element={<StudentEvents />} />
       </Route>
 

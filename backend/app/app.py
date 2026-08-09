@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .routes import auth, hod, faculty, student
+from .routes import auth, hod, faculty, student, assignments, projects, settings as sys_settings, notifications
 
 
 # Create FastAPI application
@@ -27,6 +27,10 @@ app.include_router(auth.router)
 app.include_router(hod.router)
 app.include_router(faculty.router)
 app.include_router(student.router)
+app.include_router(assignments.router)
+app.include_router(projects.router)
+app.include_router(sys_settings.router)
+app.include_router(notifications.router)
 
 
 @app.get("/")
@@ -50,3 +54,8 @@ async def health_check():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.app:app", host="0.0.0.0", port=8000, reload=True)
