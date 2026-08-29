@@ -110,6 +110,24 @@ CREATE TABLE IF NOT EXISTS public.faculty (
 CREATE INDEX IF NOT EXISTS idx_faculty_employee_id ON public.faculty(employee_id);
 
 -- ==========================================
+-- 6.5 CLASS ADVISORS
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.class_advisor_assignments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    faculty_id UUID NOT NULL REFERENCES public.faculty(id) ON DELETE CASCADE,
+    class_year VARCHAR(50) NOT NULL,
+    section VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    UNIQUE(faculty_id, class_year, section),
+    UNIQUE(class_year, section)
+);
+
+CREATE INDEX IF NOT EXISTS idx_class_advisor_faculty ON public.class_advisor_assignments(faculty_id);
+CREATE INDEX IF NOT EXISTS idx_class_advisor_class ON public.class_advisor_assignments(class_year, section);
+
+-- ==========================================
 -- 7. STUDENTS
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.students (
@@ -386,6 +404,7 @@ ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.faculty ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.class_advisor_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_details ENABLE ROW LEVEL SECURITY;
@@ -411,6 +430,7 @@ CREATE POLICY "Allow all for service role" ON public.departments FOR ALL USING (
 CREATE POLICY "Allow all for service role" ON public.classes FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.subjects FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.faculty FOR ALL USING (true);
+CREATE POLICY "Allow all for service role" ON public.class_advisor_assignments FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.students FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.attendance FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.attendance_details FOR ALL USING (true);

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
-from ..database import supabase
+from ..database import supabase, supabase_admin
 from ..middleware.auth import require_hod, CurrentUser
 from .auth import get_password_hash
 from .student import get_next_leave_status
@@ -83,6 +83,13 @@ class StudentResponse(BaseModel):
     class_year: Optional[str] = None
     section: Optional[str] = None
     batch: Optional[str] = None
+
+
+class ClassAdvisorAssignment(BaseModel):
+    """Class advisor assignment request."""
+    faculty_id: str
+    class_year: str
+    section: str
 
 
 class EventCreate(BaseModel):
@@ -396,6 +403,61 @@ async def delete_student(
 
 
 # ==================== STUDENT LEAVE APPROVAL ROUTES ====================
+
+@router.get("/class-advisors")
+async def get_class_advisors(current_user: CurrentUser = Depends(require_hod)):
+    """Get all class advisor assignments."""
+    try:
+        result = supabase_admin.table("class_advisor_assignments").select("*, faculty(name, employee_id)").order("class_year", desc=False).execute()
+        return {"assignments": result.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/class-advisors")
+async def create_class_advisor_assignment(
+    assignment: ClassAdvisorAssignment,
+    current_user: CurrentUser = Depends(require_hod)
+):
+    """Assign a faculty member as class advisor for a class and section."""
+    try:
+        existing = supabase_admin.table("class_advisor_assignments").select("*").eq("class_year", assignment.class_year).eq("section", assignment.section).execute()
+
+        if existing.data:
+            current_assignment = existing.data[0]
+            if current_assignment.get("faculty_id") == assignment.faculty_id:
+                result = supabase_admin.table("class_advisor_assignments").update({
+                    "updated_at": datetime.now().isoformat()
+                }).eq("id", current_assignment["id"]).execute()
+                return {"message": "Class advisor assignment updated successfully", "assignment": result.data[0] if result.data else current_assignment}
+
+            supabase_admin.table("class_advisor_assignments").delete().eq("id", current_assignment["id"]).execute()
+
+        result = supabase_admin.table("class_advisor_assignments").insert({
+            "faculty_id": assignment.faculty_id,
+            "class_year": assignment.class_year,
+            "section": assignment.section,
+            "updated_at": datetime.now().isoformat()
+        }).execute()
+
+        return {"message": "Class advisor assigned successfully", "assignment": result.data[0] if result.data else None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/class-advisors/{class_year}/{section}")
+async def delete_class_advisor_assignment(
+    class_year: str,
+    section: str,
+    current_user: CurrentUser = Depends(require_hod)
+):
+    """Remove the class advisor assignment for a class and section."""
+    try:
+        supabase_admin.table("class_advisor_assignments").delete().eq("class_year", class_year).eq("section", section).execute()
+        return {"message": "Class advisor assignment removed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/student-leaves")
 async def get_student_leaves(current_user: CurrentUser = Depends(require_hod)):

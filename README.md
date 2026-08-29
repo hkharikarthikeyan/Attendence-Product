@@ -22,6 +22,67 @@ This application supports three primary user roles:
 - Lockout logic after repeated failed attempts
 - Password validation and role-based authorization
 
+### Class Advisor Assignment and Student Management Logic
+
+#### 1. HOD – Assign Class Advisors
+The HOD can assign faculty members as Class Advisors for specific classes and sections.
+
+Example:
+- Sudha → Class Advisor for 3rd Year – Section A
+- Nithya → Class Advisor for 2nd Year – Section B
+
+Each class and section has one assigned Class Advisor, and the HOD can add, update, or change that assignment whenever required.
+
+#### 2. Faculty Dashboard – My Class
+Once a faculty member is assigned as a Class Advisor, a My Class option appears on the faculty dashboard.
+
+The My Class page displays only the students belonging to the assigned class and section.
+
+Example:
+- Sudha's Dashboard → My Class → 3rd Year – Section A students only
+
+The page should include:
+- Student Name
+- Register Number / Student ID
+- Attendance Percentage
+- Internal Marks
+- Project Marks
+- Overall Academic Performance
+
+The faculty can only access the data of students within their assigned class and section.
+
+#### 3. Leave Request Workflow
+The student leave request follows a two-level approval workflow:
+
+Student → Class Advisor → HOD
+
+Step 1: Student submits a leave request with leave date/duration, reason, and supporting documents when needed.
+
+Step 2: The request is visible only to the Class Advisor for that student’s class and section. Other faculty members cannot view or approve it.
+
+The Class Advisor can approve or reject the request.
+
+Step 3: If approved by the Class Advisor, the request moves to the HOD dashboard for final approval.
+
+Workflow status:
+- Pending
+- Class Advisor Approval
+- HOD Approval
+- Final Status
+
+If the Class Advisor rejects the request, it does not move to the HOD.
+
+#### Access Control Summary
+
+| Role | Access |
+| --- | --- |
+| Student | Submit leave requests and view leave status |
+| Class Advisor | View and review leave requests only from their assigned class |
+| Faculty | View academic/project data based on assigned students or responsibilities |
+| HOD | Assign Class Advisors and provide final approval for leave requests |
+
+This ensures student data and leave requests are managed according to class, section, and faculty responsibility.
+
 ### Student and Faculty Management
 - Student creation and profile management
 - Faculty onboarding and profile updates

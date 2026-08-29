@@ -102,13 +102,12 @@ export const AuthProvider = ({ children }) => {
             writeSessions(sessions);
         }
 
-        const remainingKeys = Object.keys(sessions);
-        if (remainingKeys.length > 0) {
-            const nextSession = sessions[remainingKeys[0]];
-            setActiveSession(nextSession);
-            setUser(nextSession.user);
-            return;
-        }
+        // Always clear the active session and any cached account data so logout
+        // cannot automatically reopen a previous dashboard.
+        localStorage.removeItem(SESSIONS_KEY);
+        sessionStorage.removeItem(ACTIVE_SESSION_KEY);
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
 
         setActiveSession(null);
         setUser(null);

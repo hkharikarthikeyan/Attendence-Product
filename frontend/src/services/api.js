@@ -107,6 +107,17 @@ export const hodAPI = {
     },
 
 
+    // Class Advisor Assignment
+    getClassAdvisors: async () => {
+        return fetchWithAuth('/hod/class-advisors');
+    },
+    assignClassAdvisor: async (data) => {
+        return fetchWithAuth('/hod/class-advisors', { method: 'POST', body: JSON.stringify(data) });
+    },
+    deleteClassAdvisor: async (classYear, section) => {
+        return fetchWithAuth(`/hod/class-advisors/${encodeURIComponent(classYear)}/${encodeURIComponent(section)}`, { method: 'DELETE' });
+    },
+
     // Reports
     getAttendanceReport: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();
@@ -142,6 +153,12 @@ export const facultyAPI = {
     },
     getClasses: async () => {
         return fetchWithAuth('/faculty/classes');
+    },
+    getMyClass: async () => {
+        return fetchWithAuth('/faculty/my-class');
+    },
+    getStudentDetails: async (studentId) => {
+        return fetchWithAuth(`/faculty/student/${studentId}/details`);
     },
     getStudents: async (classYear, section) => {
         return fetchWithAuth(`/faculty/students?class_year=${classYear}&section=${section}`);
