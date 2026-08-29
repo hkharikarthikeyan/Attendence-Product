@@ -1,51 +1,58 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { projectsAPI } from '../../services/api';
 import '../hod/FacultyManagement.css';
 
 const FacultyProjects = () => {
-    const [students] = useState([
-        { id: '1', name: 'Alex Johnson', roll: '01' },
-        { id: '2', name: 'Emma Davis', roll: '02' },
-        { id: '3', name: 'Ryan Smith', roll: '03' },
-        { id: '4', name: 'Sophia Lee', roll: '04' }
-    ]);
-    const [teams, setTeams] = useState([
-        { id: 't1', name: 'Alpha Team', project: 'AI-Based Attendance Scanner', members: 'Alex Johnson, Ryan Smith' },
-        { id: 't2', name: 'Beta Team', project: 'Smart IoT Node', members: 'Emma Davis, Sophia Lee' }
-    ]);
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [teamName, setTeamName] = useState('');
-    const [projectTitle, setProjectTitle] = useState('');
-    const [selectedStudents, setSelectedStudents] = useState([]);
+    const { user } = useAuth();
+    const [teams, setTeams] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [reviewing, setReviewing] = useState(null);
 
-    const toggleStudentSelection = (studentId) => {
-        if (selectedStudents.includes(studentId)) {
-            setSelectedStudents(selectedStudents.filter(id => id !== studentId));
-        } else {
-            setSelectedStudents([...selectedStudents, studentId]);
+    const loadAssignedProjects = async () => {
+        try {
+            setError('');
+            const response = await projectsAPI.getProjects();
+            const allProjects = response.data || [];
+            const myProjects = allProjects.filter((project) => project.faculty_id === user?.id);
+            setTeams(myProjects);
+        } catch (err) {
+            setError(err.message || 'Failed to load assigned projects');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const handleCreateTeam = (e) => {
-        e.preventDefault();
-        if (!teamName || !projectTitle || selectedStudents.length === 0) return;
-        
-        const memberNames = students
-            .filter(s => selectedStudents.includes(s.id))
-            .map(s => s.name)
-            .join(', ');
+    useEffect(() => {
+        if (user?.id) {
+            loadAssignedProjects();
+            const intervalId = setInterval(loadAssignedProjects, 15000);
+            return () => clearInterval(intervalId);
+        }
+    }, [user?.id]);
 
-        const newTeam = {
-            id: Date.now().toString(),
-            name: teamName,
-            project: projectTitle,
-            members: memberNames
-        };
+    const getMemberNames = (project) => {
+        const members = project.team_members || [];
+        return members
+            .map((member) => member.students?.name)
+            .filter(Boolean)
+            .join(', ') || 'No students assigned';
+    };
 
-        setTeams([...teams, newTeam]);
-        setShowCreateModal(false);
-        setTeamName('');
-        setProjectTitle('');
-        setSelectedStudents([]);
+    const handleFacultyApproval = async (projectId, status) => {
+        try {
+            setError('');
+            await projectsAPI.submitFacultyReview(projectId, {
+                faculty_status: status,
+                faculty_comment: status === 'approved' ? 'Faculty validated the project progress.' : 'Faculty rejected the current project progress. Rework required.'
+            });
+            setSuccess(status === 'approved' ? 'Project approved successfully.' : 'Project marked for rework.');
+            loadAssignedProjects();
+        } catch (err) {
+            setError(err.message || 'Failed to update project review');
+        }
     };
 
     return (
@@ -53,86 +60,111 @@ const FacultyProjects = () => {
             <header className="page-header">
                 <div>
                     <h1>Faculty Project Teams</h1>
-                    <p>Organize students into project teams and track guides assignments</p>
+                    <p>Review project progress, validate work, and approve team milestones</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                    Create Team
-                </button>
             </header>
 
-            <div className="card">
-                <div className="card-header"><h3>Active Project Groups</h3></div>
-                <div className="card-body">
-                    <div className="table-container">
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Team Name</th>
-                                    <th>Project Title</th>
-                                    <th>Members</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {teams.map(t => (
-                                    <tr key={t.id}>
-                                        <td><strong>{t.name}</strong></td>
-                                        <td>{t.project}</td>
-                                        <td>{t.members}</td>
-                                        <td>
-                                            <span style={{ 
-                                                color: '#22c55e',
-                                                backgroundColor: '#dcfce7',
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                fontWeight: 'bold',
-                                                fontSize: '0.85rem'
-                                            }}>
-                                                Active
-                                            </span>
-                                        </td>
+            {success && <div className="toast toast-success">{success}</div>}
+            {error && <div className="alert alert-error">{error}</div>}
+
+            {loading ? (
+                <div className="loading-container">
+                    <div className="spinner"></div>
+                    <p>Loading assigned teams...</p>
+                </div>
+            ) : (
+                <div className="card">
+                    <div className="card-header"><h3>Assigned Project Teams</h3></div>
+                    <div className="card-body">
+                        <div className="table-container">
+                            <table className="table">
+                                <thead>
+                                    <tr>
+                                        <th>Project Title</th>
+                                        <th>Team Members</th>
+                                        <th>Team Lead</th>
+                                        <th>Progress</th>
+                                        <th>Current Phase</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {teams.length > 0 ? (
+                                        teams.map((team) => (
+                                            <tr key={team.id}>
+                                                <td><strong>{team.title}</strong></td>
+                                                <td>{getMemberNames(team)}</td>
+                                                <td>{team.team_lead_name || 'Not assigned'}</td>
+                                                <td>{team.completion_percentage || 0}%</td>
+                                                <td>{team.current_phase || 'Phase 1'}</td>
+                                                <td>
+                                                    <span style={{
+                                                        color: team.faculty_status === 'approved' ? '#15803d' : '#b45309',
+                                                        backgroundColor: team.faculty_status === 'approved' ? '#dcfce7' : '#fef3c7',
+                                                        padding: '4px 8px',
+                                                        borderRadius: '999px',
+                                                        fontWeight: '600',
+                                                        textTransform: 'capitalize'
+                                                    }}>
+                                                        {team.faculty_status || 'pending'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                        <button className="btn btn-sm btn-primary" onClick={() => setReviewing(team)}>
+                                                            View
+                                                        </button>
+                                                        <button className="btn btn-sm btn-secondary" onClick={() => handleFacultyApproval(team.id, 'approved')}>
+                                                            Approve
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="6" className="text-center text-muted">No project teams assigned to you yet.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
-            {showCreateModal && (
-                <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+            {reviewing && (
+                <div className="modal-overlay" onClick={() => setReviewing(null)}>
                     <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Create Project Team</h3>
-                            <button className="btn btn-sm btn-secondary" onClick={() => setShowCreateModal(false)}>✕</button>
+                            <h3>{reviewing.title} Status</h3>
+                            <button className="btn btn-sm btn-secondary" onClick={() => setReviewing(null)}>✕</button>
                         </div>
-                        <form onSubmit={handleCreateTeam}>
-                            <div className="modal-body">
-                                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                                    <label className="form-label">Team Name *</label>
-                                    <input type="text" className="form-input" value={teamName} onChange={(e) => setTeamName(e.target.value)} required />
+                        <div className="modal-body">
+                            <p><strong>Team Lead:</strong> {reviewing.team_lead_name || 'Not assigned'}</p>
+                            <p><strong>Team:</strong> {getMemberNames(reviewing)}</p>
+                            <p><strong>Completion:</strong> {reviewing.completion_percentage || 0}%</p>
+                            <p><strong>Current Phase:</strong> {reviewing.current_phase || 'Phase 1'}</p>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginTop: '1rem' }}>
+                                <div className="card" style={{ padding: '0.75rem' }}>
+                                    <strong>Phase 1</strong>
+                                    <div>{reviewing.progress?.phase_1_mark || 0}%</div>
                                 </div>
-                                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                                    <label className="form-label">Project Title *</label>
-                                    <input type="text" className="form-input" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} required />
+                                <div className="card" style={{ padding: '0.75rem' }}>
+                                    <strong>Phase 2</strong>
+                                    <div>{reviewing.progress?.phase_2_mark || 0}%</div>
                                 </div>
-                                <div className="form-group">
-                                    <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Select Team Members *</label>
-                                    <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #cbd5e1', padding: '0.5rem', borderRadius: '6px' }}>
-                                        {students.map(s => (
-                                            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <input type="checkbox" checked={selectedStudents.includes(s.id)} onChange={() => toggleStudentSelection(s.id)} />
-                                                <span>{s.name} (Roll: {s.roll})</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div className="card" style={{ padding: '0.75rem' }}>
+                                    <strong>Phase 3</strong>
+                                    <div>{reviewing.progress?.phase_3_mark || 0}%</div>
                                 </div>
                             </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-primary" disabled={!teamName || !projectTitle || selectedStudents.length === 0}>Create</button>
-                            </div>
-                        </form>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setReviewing(null)}>Close</button>
+                            <button className="btn btn-primary" onClick={() => handleFacultyApproval(reviewing.id, 'approved')}>Approve</button>
+                        </div>
                     </div>
                 </div>
             )}

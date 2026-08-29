@@ -57,6 +57,15 @@ const StudentEvents = () => {
                                     {event.event_type}
                                 </span>
                             </div>
+                            {event.image_url && (
+                                <div className="event-image-container" style={{ margin: '0.75rem 0', borderRadius: '6px', overflow: 'hidden', height: '140px' }}>
+                                    <img
+                                        src={event.image_url.startsWith('http') ? event.image_url : `http://localhost:8000${event.image_url}`}
+                                        alt={event.title}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                </div>
+                            )}
                             <h3>{event.title}</h3>
                             <p className="event-description">{event.description}</p>
                             <div className="event-meta">

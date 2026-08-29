@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
     from_date DATE NOT NULL,
     to_date DATE NOT NULL,
     reason TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'pending_faculty', 'pending_hod', 'approved', 'rejected')),
     rejection_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

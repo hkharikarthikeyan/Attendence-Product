@@ -17,6 +17,8 @@ import StudentUpload from './pages/faculty/StudentUpload';
 import FacultyEvents from './pages/faculty/FacultyEvents';
 import LeaveRequest from './pages/faculty/LeaveRequest';
 import FacultySubmissions from './pages/faculty/FacultySubmissions';
+import FacultyAssignmentUpload from './pages/faculty/FacultyAssignmentUpload';
+import FacultyAssignments from './pages/faculty/FacultyAssignments';
 import FacultyProjects from './pages/faculty/FacultyProjects';
 
 import { StudentLayout, StudentDashboard } from './pages/student/StudentDashboard';
@@ -26,6 +28,7 @@ import StudentMarks from './pages/student/StudentMarks';
 import StudentEvents from './pages/student/StudentEvents';
 import StudentAssignments from './pages/student/StudentAssignments';
 import StudentProjects from './pages/student/StudentProjects';
+import StudentLeaveRequests from './pages/student/StudentLeaveRequest';
 import './index.css';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -92,6 +95,8 @@ const AppRoutes = () => {
         <Route path="students" element={<StudentUpload />} />
         <Route path="attendance" element={<AttendanceEntry />} />
         <Route path="marks" element={<MarksEntry />} />
+        <Route path="assignments" element={<FacultyAssignments />} />
+        <Route path="assignments/upload" element={<FacultyAssignmentUpload />} />
         <Route path="submissions" element={<FacultySubmissions />} />
         <Route path="projects" element={<FacultyProjects />} />
         <Route path="events" element={<FacultyEvents />} />
@@ -111,6 +116,7 @@ const AppRoutes = () => {
         <Route path="assignments" element={<StudentAssignments />} />
         <Route path="projects" element={<StudentProjects />} />
         <Route path="events" element={<StudentEvents />} />
+        <Route path="leaves" element={<StudentLeaveRequests />} />
       </Route>
 
       {/* Default redirect */}
