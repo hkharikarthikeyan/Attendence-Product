@@ -9,6 +9,17 @@ from ..middleware.auth import require_student, CurrentUser
 router = APIRouter(prefix="/api/student", tags=["Student"])
 
 
+def get_next_leave_status(current_status: str, reviewer_role: str, approved: bool) -> str:
+    """Advance the leave request through faculty and HOD approval stages."""
+    if current_status == "pending_faculty" and reviewer_role == "faculty":
+        return "pending_hod" if approved else "rejected"
+    if current_status == "pending_hod" and reviewer_role == "hod":
+        return "approved" if approved else "rejected"
+    if approved and current_status in {"pending_faculty", "pending_hod"}:
+        return "pending_hod" if current_status == "pending_faculty" else "approved"
+    return "rejected" if not approved else current_status
+
+
 # ==================== PROFILE ROUTES ====================
 
 @router.get("/profile")
@@ -159,14 +170,21 @@ async def get_marks(
 ):
     """Get student's marks with percentage calculation."""
     try:
-        query = supabase.table("marks").select("*").eq("student_id", current_user.id)
-        
+        result = supabase.table("marks").select("*, subjects(name)").eq("student_id", current_user.id).execute()
+        records = result.data or []
+
         if subject:
-            query = query.eq("subject", subject)
+            records = [
+                item for item in records
+                if ((item.get("subjects") or {}).get("name") or item.get("subject")) == subject
+            ]
         if exam_type:
-            query = query.eq("exam_type", exam_type)
-        
-        result = query.execute()
+            records = [
+                item for item in records
+                if item.get("exam_type") == exam_type
+            ]
+
+        result = type("Result", (), {"data": records})()
         
         # Calculate overall statistics
         total_obtained = sum(m["marks_obtained"] for m in result.data)
@@ -176,7 +194,7 @@ async def get_marks(
         # Subject-wise breakdown
         subjects = {}
         for record in result.data:
-            subj = record["subject"]
+            subj = (record.get("subjects") or {}).get("name") or record.get("subject") or "Unknown"
             if subj not in subjects:
                 subjects[subj] = {"obtained": 0, "max": 0, "exams": []}
             subjects[subj]["obtained"] += record["marks_obtained"]
@@ -295,14 +313,12 @@ async def apply_leave(
     current_user: CurrentUser = Depends(require_student)
 ):
     try:
-        # Get student details
         student_data = supabase.table("students").select("id").eq("id", current_user.id).execute()
         if not student_data.data:
-             raise HTTPException(status_code=404, detail="Student profile not found")
-        
+            raise HTTPException(status_code=404, detail="Student profile not found")
+
         student_id = student_data.data[0]['id']
 
-        # Validate dates
         try:
             from_d = datetime.strptime(leave.from_date, "%Y-%m-%d").date()
             to_d = datetime.strptime(leave.to_date, "%Y-%m-%d").date()
@@ -312,25 +328,17 @@ async def apply_leave(
             raise HTTPException(status_code=400, detail=str(e))
 
         leave_data = {
-            "user_id": current_user.id, # Link to user
-            "student_id": student_id,   # Redundant but useful for queries if we linked by student_id in schema
-            # Actually schema uses user_id for leave_requests? 
-            # Let's check schema. create_missing_tables.py said:
-            # user_id UUID REFERENCES public.users(id)
-            # It didn't explicitly link to students table, but we know user_id is the same.
-            
-            # Use user_id as foreign key to users table
+            "user_id": current_user.id,
             "role": "student",
             "leave_type": leave.leave_type,
             "from_date": leave.from_date,
             "to_date": leave.to_date,
             "reason": leave.reason,
-            "status": "pending"
+            "status": "pending_faculty",
+            "updated_at": datetime.now().isoformat()
         }
-        
-        # Insert into leave_requests
+
         result = supabase.table("leave_requests").insert(leave_data).execute()
-        
         return {"message": "Leave application submitted successfully", "data": result.data}
 
     except Exception as e:
@@ -340,14 +348,16 @@ async def apply_leave(
 @router.get("/leaves")
 async def get_my_leaves(current_user: CurrentUser = Depends(require_student)):
     try:
-        # Fetch leaves for this student
-        response = supabase.table("leave_requests")\
-            .select("*")\
-            .eq("user_id", current_user.id)\
-            .order("created_at", desc=True)\
+        response = supabase.table("leave_requests") \
+            .select("*") \
+            .eq("user_id", current_user.id) \
+            .order("created_at", desc=True) \
             .execute()
-            
-        return {"leaves": response.data}
+
+        leaves = response.data or []
+        for item in leaves:
+            item["status_label"] = item.get("status", "pending_faculty")
+        return {"leaves": leaves}
     except Exception as e:
         print(f"Error fetching leaves: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -358,25 +368,23 @@ async def cancel_leave(
     current_user: CurrentUser = Depends(require_student)
 ):
     try:
-        # Verify ownership and status
-        existing = supabase.table("leave_requests")\
-            .select("*")\
-            .eq("id", request_id)\
-            .eq("user_id", current_user.id)\
+        existing = supabase.table("leave_requests") \
+            .select("*") \
+            .eq("id", request_id) \
+            .eq("user_id", current_user.id) \
             .execute()
-            
+
         if not existing.data:
-             raise HTTPException(status_code=404, detail="Leave request not found")
-             
-        if existing.data[0]['status'] != 'pending':
+            raise HTTPException(status_code=404, detail="Leave request not found")
+
+        current_status = existing.data[0].get("status", "pending_faculty")
+        if current_status not in {"pending", "pending_faculty", "pending_hod"}:
             raise HTTPException(status_code=400, detail="Cannot cancel a processed leave request")
-            
-        # Delete
+
         supabase.table("leave_requests").delete().eq("id", request_id).execute()
-        
         return {"message": "Leave request cancelled"}
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error cancelling leave: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,27 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { assignmentsAPI } from '../../services/api';
 import '../hod/FacultyManagement.css';
 
 const FacultySubmissions = () => {
-    const [submissions, setSubmissions] = useState([
-        { id: 's1', student_name: 'Alex Johnson', roll: '01', title: 'Calculus Assignment 1', file: 'calculus_alex.jpg', marks: '', status: 'submitted' },
-        { id: 's2', student_name: 'Ryan Smith', roll: '03', title: 'Calculus Assignment 1', file: 'calculus_ryan.pdf', marks: '45', status: 'evaluated' },
-        { id: 's3', student_name: 'Emma Davis', roll: '02', title: 'Calculus Assignment 1', file: 'calculus_emma.jpg', marks: '', status: 'submitted' }
-    ]);
+    const [submissions, setSubmissions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const [selectedSubmission, setSelectedSubmission] = useState(null);
     const [marksInput, setMarksInput] = useState('');
     const [feedback, setFeedback] = useState('');
 
-    const saveEvaluation = () => {
-        setSubmissions(submissions.map(sub => {
-            if (sub.id === selectedSubmission.id) {
-                return { ...sub, marks: marksInput, status: 'evaluated' };
-            }
-            return sub;
-        }));
-        setSelectedSubmission(null);
-        setMarksInput('');
-        setFeedback('');
+    const loadSubmissions = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const response = await assignmentsAPI.getSubmissions();
+            setSubmissions(response.data || []);
+        } catch (err) {
+            setError(err.message || 'Failed to load submissions');
+        } finally {
+            setLoading(false);
+        }
     };
+
+    useEffect(() => {
+        loadSubmissions();
+    }, []);
+
+    const saveEvaluation = async () => {
+        try {
+            await assignmentsAPI.evaluateSubmission(selectedSubmission.id, marksInput, feedback);
+            setSelectedSubmission(null);
+            setMarksInput('');
+            setFeedback('');
+            await loadSubmissions();
+        } catch (err) {
+            setError(err.message || 'Failed to evaluate submission');
+        }
+    };
+
+    const submittedCount = submissions.length;
+    const evaluatedCount = submissions.filter(sub => sub.status === 'evaluated').length;
 
     return (
         <div className="management-page">
@@ -37,11 +56,13 @@ const FacultySubmissions = () => {
                     <div>
                         <h4 style={{ color: '#64748b' }}>Class Submission Rate</h4>
                         <h2 style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#1e3a5f', marginTop: '0.5rem' }}>
-                            75% <span style={{ fontSize: '1rem', color: '#64748b', fontWeight: 'normal' }}>(3 of 4 students submitted)</span>
+                            {submittedCount} <span style={{ fontSize: '1rem', color: '#64748b', fontWeight: 'normal' }}>submissions ({evaluatedCount} evaluated)</span>
                         </h2>
                     </div>
                 </div>
             </div>
+
+            {error && <div className="alert alert-error">{error}</div>}
 
             <div className="card">
                 <div className="card-header"><h3>Submissions List</h3></div>
@@ -60,12 +81,16 @@ const FacultySubmissions = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {submissions.map(sub => (
+                                {loading ? (
+                                    <tr><td colSpan="7" className="text-center">Loading submissions...</td></tr>
+                                ) : submissions.length === 0 ? (
+                                    <tr><td colSpan="7" className="text-center text-muted">No submissions found.</td></tr>
+                                ) : submissions.map(sub => (
                                     <tr key={sub.id}>
-                                        <td><strong>{sub.student_name}</strong></td>
-                                        <td>{sub.roll}</td>
-                                        <td>{sub.title}</td>
-                                        <td><a href="#" onClick={(e) => { e.preventDefault(); alert(`Viewing file: ${sub.file}`); }} style={{ color: '#14b8a6', textDecoration: 'underline' }}>{sub.file}</a></td>
+                                        <td><strong>{sub.students?.name || 'Unknown student'}</strong></td>
+                                        <td>{sub.students?.roll_number || '-'}</td>
+                                        <td>{sub.assignments?.title || 'Unknown assignment'}</td>
+                                        <td>{sub.file_url ? <a href={sub.file_url} target="_blank" rel="noreferrer" style={{ color: '#14b8a6', textDecoration: 'underline' }}>View file</a> : '-'}</td>
                                         <td>
                                             <span style={{ 
                                                 color: sub.status === 'evaluated' ? '#22c55e' : '#eab308',
@@ -78,9 +103,9 @@ const FacultySubmissions = () => {
                                                 {sub.status}
                                             </span>
                                         </td>
-                                        <td><strong>{sub.marks || '-'}</strong></td>
+                                        <td><strong>{sub.marks_obtained ?? '-'}</strong></td>
                                         <td>
-                                            <button className="btn btn-sm btn-primary" onClick={() => { setSelectedSubmission(sub); setMarksInput(sub.marks); }}>
+                                            <button className="btn btn-sm btn-primary" onClick={() => { setSelectedSubmission(sub); setMarksInput(sub.marks_obtained ?? ''); setFeedback(sub.feedback || ''); }}>
                                                 Evaluate
                                             </button>
                                         </td>
@@ -100,8 +125,8 @@ const FacultySubmissions = () => {
                             <button className="btn btn-sm btn-secondary" onClick={() => setSelectedSubmission(null)}>✕</button>
                         </div>
                         <div className="modal-body">
-                            <p style={{ marginBottom: '0.5rem' }}><strong>Student:</strong> {selectedSubmission.student_name}</p>
-                            <p style={{ marginBottom: '1rem' }}><strong>Assignment:</strong> {selectedSubmission.title}</p>
+                            <p style={{ marginBottom: '0.5rem' }}><strong>Student:</strong> {selectedSubmission.students?.name || 'Unknown student'}</p>
+                            <p style={{ marginBottom: '1rem' }}><strong>Assignment:</strong> {selectedSubmission.assignments?.title || 'Unknown assignment'}</p>
                             <div className="form-group" style={{ marginBottom: '1rem' }}>
                                 <label className="form-label">Marks Obtained (Max 50) *</label>
                                 <input type="number" className="form-input" value={marksInput} onChange={(e) => setMarksInput(e.target.value)} max="50" required />

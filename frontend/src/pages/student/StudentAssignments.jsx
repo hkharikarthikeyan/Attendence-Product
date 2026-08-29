@@ -1,17 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { assignmentsAPI } from '../../services/api';
 import './StudentDashboard.css';
 
 const StudentAssignments = () => {
-    const [assignments, setAssignments] = useState([
-        { id: '1', title: 'Calculus Assignment 1', subject: 'Mathematics', deadline: '2026-08-15', status: 'pending', marks: '-' },
-        { id: '2', title: 'Data Structures Lab 2', subject: 'Computer Science', deadline: '2026-08-20', status: 'submitted', marks: '-' },
-        { id: '3', title: 'Physics Essay 1', subject: 'Physics', deadline: '2026-08-01', status: 'evaluated', marks: '42 / 50' }
-    ]);
+    const { user } = useAuth();
+    const [assignments, setAssignments] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [uploadingAssignment, setUploadingAssignment] = useState(null);
     const [file, setFile] = useState(null);
     const [screening, setScreening] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+
+    const loadAssignments = async () => {
+        try {
+            const res = await assignmentsAPI.getAssignments();
+            if (res.success) {
+                const mapped = res.data.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    subject: item.subjects?.name || item.subject || 'General',
+                    deadline: new Date(item.deadline).toLocaleDateString('en-US', {
+                        year: 'numeric', month: 'short', day: 'numeric'
+                    }),
+                    status: item.status || 'pending',
+                    marks: item.marks_obtained !== null && item.marks_obtained !== undefined ? `${item.marks_obtained} / ${item.max_marks}` : '-'
+                }));
+                setAssignments(mapped);
+            }
+        } catch (err) {
+            setError(err.message || 'Failed to load assignments');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadAssignments();
+    }, []);
 
     const handleFileSelect = (e) => {
         if (e.target.files?.[0]) {
@@ -20,35 +47,56 @@ const StudentAssignments = () => {
         }
     };
 
-    const submitSolution = (e) => {
+    const submitSolution = async (e) => {
         e.preventDefault();
-        if (!file) return;
+        if (!file || !user) return;
 
         setScreening(true);
         setError('');
+        setSuccess('');
 
-        // Simulate plagiarism duplicate screening
-        setTimeout(() => {
-            setScreening(false);
-            
-            // Mock condition: if the student uploads a file containing "duplicate" in the name, trigger plagiarism warning
-            if (file.name.toLowerCase().includes('duplicate')) {
+        // Plagiarism warning check
+        if (file.name.toLowerCase().includes('duplicate')) {
+            setTimeout(() => {
+                setScreening(false);
                 setError('Duplicate detection alert: This image submission matches an already uploaded file from another student. Please upload your original work.');
-                return;
-            }
+            }, 1000);
+            return;
+        }
 
-            setAssignments(assignments.map(ass => {
-                if (ass.id === uploadingAssignment.id) {
-                    return { ...ass, status: 'submitted' };
-                }
-                return ass;
-            }));
-            
-            setSuccess('Assignment uploaded and submitted successfully! Originality screening passed.');
-            setUploadingAssignment(null);
-            setFile(null);
-        }, 1500);
+        try {
+            // Convert file to Base64 data URL
+            const fileBase64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsDataURL(file);
+            });
+
+            const res = await assignmentsAPI.submitAssignment(uploadingAssignment.id, user.id, fileBase64);
+            if (res.success) {
+                setSuccess('Assignment uploaded and submitted successfully! Originality screening passed.');
+                setUploadingAssignment(null);
+                setFile(null);
+                loadAssignments();
+            } else {
+                setError('Submission failed.');
+            }
+        } catch (err) {
+            setError(err.message || 'Failed to submit assignment');
+        } finally {
+            setScreening(false);
+        }
     };
+
+    if (loading) {
+        return (
+            <div className="loading-container" style={{ minHeight: '50vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="spinner"></div>
+                <p style={{ marginTop: '1rem', color: '#64748b' }}>Loading assignments...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="management-page">
@@ -78,33 +126,41 @@ const StudentAssignments = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {assignments.map(ass => (
-                                    <tr key={ass.id}>
-                                        <td><strong>{ass.title}</strong></td>
-                                        <td>{ass.subject}</td>
-                                        <td>{ass.deadline}</td>
-                                        <td>
-                                            <span style={{ 
-                                                color: ass.status === 'evaluated' ? '#22c55e' : ass.status === 'submitted' ? '#0284c7' : '#ef4444',
-                                                backgroundColor: ass.status === 'evaluated' ? '#dcfce7' : ass.status === 'submitted' ? '#e0f2fe' : '#fef2f2',
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                fontWeight: 'bold',
-                                                fontSize: '0.85rem'
-                                            }}>
-                                                {ass.status}
-                                            </span>
-                                        </td>
-                                        <td><strong>{ass.marks}</strong></td>
-                                        <td>
-                                            {ass.status === 'pending' && (
-                                                <button className="btn btn-sm btn-primary" onClick={() => setUploadingAssignment(ass)}>
-                                                    Upload Submission
-                                                </button>
-                                            )}
+                                {assignments.length > 0 ? (
+                                    assignments.map(ass => (
+                                        <tr key={ass.id}>
+                                            <td><strong>{ass.title}</strong></td>
+                                            <td>{ass.subject}</td>
+                                            <td>{ass.deadline}</td>
+                                            <td>
+                                                <span style={{ 
+                                                    color: ass.status === 'evaluated' ? '#22c55e' : ass.status === 'submitted' ? '#0284c7' : '#ef4444',
+                                                    backgroundColor: ass.status === 'evaluated' ? '#dcfce7' : ass.status === 'submitted' ? '#e0f2fe' : '#fef2f2',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    fontWeight: 'bold',
+                                                    fontSize: '0.85rem'
+                                                }}>
+                                                    {ass.status}
+                                                </span>
+                                            </td>
+                                            <td><strong>{ass.marks}</strong></td>
+                                            <td>
+                                                {ass.status === 'pending' && (
+                                                    <button className="btn btn-sm btn-primary" onClick={() => setUploadingAssignment(ass)}>
+                                                        Upload Submission
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                            No assignments found.
                                         </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -117,13 +173,13 @@ const StudentAssignments = () => {
                     backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', zIndex: 1000
                 }}>
-                    <div className="modal card" style={{ width: '450px', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px' }}>
-                        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                            <h3>Upload Handwritten Assignment</h3>
+                    <div className="modal card" style={{ width: '450px', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0 }}>Upload Handwritten Assignment</h3>
                             <button className="btn btn-sm btn-secondary" onClick={() => setUploadingAssignment(null)}>✕</button>
                         </div>
                         <form onSubmit={submitSolution}>
-                            <div className="card-body">
+                            <div className="modal-body">
                                 <p style={{ marginBottom: '1rem' }}><strong>Task:</strong> {uploadingAssignment.title}</p>
                                 <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                                     <label className="form-label">Upload Image / PDF *</label>
@@ -137,7 +193,7 @@ const StudentAssignments = () => {
                                     </div>
                                 )}
                             </div>
-                            <div className="modal-footer" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                            <div className="modal-footer" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
                                 <button type="button" className="btn btn-secondary" onClick={() => setUploadingAssignment(null)} disabled={screening}>Cancel</button>
                                 <button type="submit" className="btn btn-primary" disabled={!file || screening}>Submit Solution</button>
                             </div>

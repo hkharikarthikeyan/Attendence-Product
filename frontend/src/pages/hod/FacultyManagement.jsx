@@ -39,11 +39,18 @@ const FacultyManagement = () => {
 
         try {
             if (editingFaculty) {
-                await hodAPI.updateFaculty(editingFaculty.id, {
+                const payload = {
                     name: formData.name,
                     mobile: formData.mobile,
+                    employee_id: formData.employee_id,
                     department: formData.department,
-                });
+                };
+
+                if (formData.password && formData.password.trim()) {
+                    payload.password = formData.password.trim();
+                }
+
+                await hodAPI.updateFaculty(editingFaculty.id, payload);
                 setSuccess('Faculty updated successfully');
             } else {
                 await hodAPI.createFaculty(formData);
@@ -258,18 +265,19 @@ const FacultyManagement = () => {
                                             disabled={!!editingFaculty}
                                         />
                                     </div>
-                                    {!editingFaculty && (
-                                        <div className="form-group">
-                                            <label className="form-label">Password *</label>
-                                            <input
-                                                type="password"
-                                                className="form-input"
-                                                value={formData.password}
-                                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                                required={!editingFaculty}
-                                            />
-                                        </div>
-                                    )}
+                                    <div className="form-group">
+                                        <label className="form-label">
+                                            {editingFaculty ? 'Update Password (optional)' : 'Password *'}
+                                        </label>
+                                        <input
+                                            type="password"
+                                            className="form-input"
+                                            value={formData.password}
+                                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                            required={!editingFaculty}
+                                            placeholder={editingFaculty ? 'Leave blank to keep current password' : 'Enter password'}
+                                        />
+                                    </div>
                                     <div className="form-group">
                                         <label className="form-label">Mobile</label>
                                         <input

@@ -8,9 +8,40 @@ const EventsManagement = () => {
     const [showModal, setShowModal] = useState(false);
     const [editingEvent, setEditingEvent] = useState(null);
     const [formData, setFormData] = useState({
-        title: '', description: '', event_date: '', event_type: 'general',
+        title: '', description: '', event_date: '', event_type: 'general', image_url: ''
     });
     const [error, setError] = useState('');
+    const [uploadingImage, setUploadingImage] = useState(false);
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            setError('Only image files (PNG, JPG, JPEG, GIF, WEBP) are allowed');
+            return;
+        }
+
+        setUploadingImage(true);
+        setError('');
+        try {
+            const reader = new FileReader();
+            reader.onload = () => {
+                setFormData(prev => ({ ...prev, image_url: reader.result }));
+                setUploadingImage(false);
+            };
+            reader.onerror = () => {
+                setError('Failed to read image file');
+                setUploadingImage(false);
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            setError('Failed to process image');
+            setUploadingImage(false);
+        }
+    };
     const [success, setSuccess] = useState('');
 
     useEffect(() => { 
@@ -72,11 +103,12 @@ const EventsManagement = () => {
                 title: event.title,
                 description: event.description,
                 event_date: new Date(event.event_date).toISOString().slice(0, 16),
-                event_type: event.event_type
+                event_type: event.event_type,
+                image_url: event.image_url || ''
             });
         } else {
             setEditingEvent(null);
-            setFormData({ title: '', description: '', event_date: '', event_type: 'general' });
+            setFormData({ title: '', description: '', event_date: '', event_type: 'general', image_url: '' });
         }
         setShowModal(true);
     };
@@ -84,7 +116,7 @@ const EventsManagement = () => {
     const closeModal = () => {
         setShowModal(false);
         setEditingEvent(null);
-        setFormData({ title: '', description: '', event_date: '', event_type: 'general' });
+        setFormData({ title: '', description: '', event_date: '', event_type: 'general', image_url: '' });
     };
 
     const isEventCompleted = (eventDate) => {
@@ -167,6 +199,15 @@ const EventsManagement = () => {
                                     </button>
                                 </div>
                             </div>
+                            {event.image_url && (
+                                <div className="event-image-container" style={{ margin: '0.75rem 0', borderRadius: '6px', overflow: 'hidden', height: '140px' }}>
+                                    <img
+                                        src={event.image_url.startsWith('http') ? event.image_url : `http://localhost:8000${event.image_url}`}
+                                        alt={event.title}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                </div>
+                            )}
                             <h3>{event.title}</h3>
                             <p className="event-description">{event.description}</p>
                             <div className="event-meta">
@@ -220,6 +261,88 @@ const EventsManagement = () => {
                                     <label className="form-label">Description *</label>
                                     <textarea className="form-input" rows="3" value={formData.description}
                                         onChange={(e) => setFormData({ ...formData, description: e.target.value })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Event Banner Image</label>
+                                    {formData.image_url ? (
+                                        <div style={{ position: 'relative', marginTop: '0.5rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                                            <img src={formData.image_url} alt="Event Preview" style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setFormData({ ...formData, image_url: '' })}
+                                                style={{
+                                                    position: 'absolute', top: '10px', right: '10px',
+                                                    background: 'rgba(239, 68, 68, 0.9)', color: 'white',
+                                                    border: 'none', borderRadius: '50%', width: '32px', height: '32px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    cursor: 'pointer', fontWeight: 'bold', fontSize: '14px',
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)', transition: 'background 0.2s'
+                                                }}
+                                                title="Remove Image"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div 
+                                            style={{
+                                                border: '2px dashed #cbd5e1',
+                                                borderRadius: '8px',
+                                                padding: '1.5rem',
+                                                textAlign: 'center',
+                                                cursor: 'pointer',
+                                                backgroundColor: '#f8fafc',
+                                                transition: 'all 0.2s',
+                                                marginTop: '0.5rem',
+                                                position: 'relative'
+                                            }}
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={async (e) => {
+                                                e.preventDefault();
+                                                const file = e.dataTransfer.files?.[0];
+                                                if (file) {
+                                                    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+                                                    if (!validTypes.includes(file.type)) {
+                                                        setError('Only image files (PNG, JPG, JPEG, GIF, WEBP) are allowed');
+                                                        return;
+                                                    }
+                                                    setUploadingImage(true);
+                                                    const reader = new FileReader();
+                                                    reader.onload = () => {
+                                                        setFormData(prev => ({ ...prev, image_url: reader.result }));
+                                                        setUploadingImage(false);
+                                                    };
+                                                    reader.onerror = () => {
+                                                        setError('Failed to read image file');
+                                                        setUploadingImage(false);
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                }
+                                            }}
+                                        >
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                onChange={handleImageUpload} 
+                                                style={{
+                                                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                                    opacity: 0, cursor: 'pointer'
+                                                }} 
+                                                disabled={uploadingImage}
+                                            />
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ width: '40px', height: '40px', margin: '0 auto 0.5rem' }}>
+                                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <polyline points="21 15 16 10 5 21" />
+                                            </svg>
+                                            <p style={{ color: '#475569', fontSize: '0.9rem', margin: 0, fontWeight: 500 }}>
+                                                {uploadingImage ? 'Uploading Image...' : 'Click or Drag image here to upload'}
+                                            </p>
+                                            <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '4px 0 0' }}>
+                                                Supports PNG, JPG, JPEG, WEBP, GIF
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="form-grid">
                                     <div className="form-group">

@@ -4,7 +4,20 @@
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
-const getToken = () => localStorage.getItem('token');
+const getToken = () => {
+    const activeSession = sessionStorage.getItem('active_session');
+    if (activeSession) {
+        try {
+            const parsed = JSON.parse(activeSession);
+            if (parsed?.access_token) {
+                return parsed.access_token;
+            }
+        } catch {
+            // ignore malformed session data and fall back to the legacy single-token value
+        }
+    }
+    return sessionStorage.getItem('token') || localStorage.getItem('token');
+};
 
 const fetchWithAuth = async (url, options = {}) => {
     const token = getToken();
@@ -93,6 +106,7 @@ export const hodAPI = {
         return fetchWithAuth(`/hod/events/${id}`, { method: 'DELETE' });
     },
 
+
     // Reports
     getAttendanceReport: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();
@@ -109,6 +123,12 @@ export const hodAPI = {
     },
     updateLeaveStatus: async (id, data) => {
         return fetchWithAuth(`/hod/faculty-leaves/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    getStudentLeaves: async () => {
+        return fetchWithAuth('/hod/student-leaves');
+    },
+    updateStudentLeaveStatus: async (id, data) => {
+        return fetchWithAuth(`/hod/student-leaves/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 };
 
@@ -221,6 +241,15 @@ export const facultyAPI = {
     getLeaves: async () => {
         return fetchWithAuth('/faculty/my-leaves');
     },
+    getStudentLeaves: async () => {
+        return fetchWithAuth('/faculty/student-leaves');
+    },
+    updateStudentLeave: async (id, status, rejectionReason = '') => {
+        return fetchWithAuth(`/faculty/student-leaves/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, rejection_reason: rejectionReason })
+        });
+    },
 };
 
 // Student API
@@ -244,6 +273,101 @@ export const studentAPI = {
     getDashboard: async () => {
         return fetchWithAuth('/student/dashboard');
     },
+    getMyProjects: async () => {
+        return fetchWithAuth('/projects/my-projects');
+    },
+    applyLeave: async (data) => {
+        return fetchWithAuth('/student/leaves', { method: 'POST', body: JSON.stringify(data) });
+    },
+    getLeaves: async () => {
+        return fetchWithAuth('/student/leaves');
+    },
+};
+// Assignments API
+export const assignmentsAPI = {
+    getAssignments: async (classYear = '', section = '') => {
+        const params = new URLSearchParams();
+        if (classYear) params.append('class_year', classYear);
+        if (section) params.append('section', section);
+        const queryString = params.toString();
+        return fetchWithAuth(`/assignments${queryString ? `?${queryString}` : ''}`);
+    },
+    createAssignment: async (data) => {
+        return fetchWithAuth('/assignments', { method: 'POST', body: JSON.stringify(data) });
+    },
+    getClassStudentCount: async (classYear, section) => {
+        return fetchWithAuth(`/assignments/class-count?class_year=${encodeURIComponent(classYear)}&section=${encodeURIComponent(section)}`);
+    },
+    getSubmissions: async (assignmentId = null, classYear = '', section = '') => {
+        const params = new URLSearchParams();
+        if (assignmentId) params.append('assignment_id', assignmentId);
+        if (classYear) params.append('class_year', classYear);
+        if (section) params.append('section', section);
+        const queryString = params.toString();
+        return fetchWithAuth(`/assignments/submissions${queryString ? `?${queryString}` : ''}`);
+    },
+    evaluateSubmission: async (submissionId, marksObtained, feedback) => {
+        return fetchWithAuth('/assignments/evaluate', {
+            method: 'POST',
+            body: JSON.stringify({
+                submission_id: submissionId,
+                marks_obtained: Number(marksObtained),
+                feedback: feedback || null
+            })
+        });
+    },
+    submitAssignment: async (assignmentId, studentId, fileBase64) => {
+        return fetchWithAuth('/assignments/submit', {
+            method: 'POST',
+            body: JSON.stringify({
+                assignment_id: assignmentId,
+                student_id: studentId,
+                file_url: fileBase64
+            })
+        });
+    }
 };
 
-export default { authAPI, hodAPI, facultyAPI, studentAPI };
+export const projectsAPI = {
+    getProjects: async () => {
+        return fetchWithAuth('/projects');
+    },
+    getMyProjects: async () => {
+        return fetchWithAuth('/projects/my-projects');
+    },
+    getProjectStatus: async (projectId) => {
+        return fetchWithAuth(`/projects/progress/${projectId}`);
+    },
+    createProjectTeam: async (data) => {
+        return fetchWithAuth('/projects/create-team', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    },
+    takeLead: async (projectId) => {
+        return fetchWithAuth(`/projects/${projectId}/take-lead`, {
+            method: 'POST'
+        });
+    },
+    updateProjectPhase: async (projectId, data) => {
+        return fetchWithAuth(`/projects/${projectId}/phase-update`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    },
+    submitFacultyReview: async (projectId, data) => {
+        return fetchWithAuth(`/projects/progress/${projectId}/faculty-review`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    },
+    submitHODMarks: async (projectId, data) => {
+        return fetchWithAuth(`/projects/progress/${projectId}/hod-review`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+};
+
+export default { authAPI, hodAPI, facultyAPI, studentAPI, assignmentsAPI, projectsAPI };
+

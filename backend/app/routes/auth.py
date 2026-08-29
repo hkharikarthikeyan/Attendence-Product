@@ -1,3 +1,4 @@
+import math
 import bcrypt
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
@@ -62,17 +63,43 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
+
+def format_lockout_message(locked_until_value) -> str:
+    """Return a user-friendly lockout message in minutes for the frontend."""
+    if not locked_until_value:
+        return "Account locked. Try again later."
+
+    try:
+        if isinstance(locked_until_value, str):
+            lock_time = datetime.fromisoformat(locked_until_value.replace("Z", "+00:00"))
+        else:
+            lock_time = locked_until_value
+
+        if lock_time.tzinfo is None:
+            lock_time = lock_time.replace(tzinfo=timezone.utc)
+
+        remaining_seconds = (lock_time - datetime.now(timezone.utc)).total_seconds()
+        if remaining_seconds <= 0:
+            return "Account locked. Try again later."
+
+        remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
+        suffix = "" if remaining_minutes == 1 else "s"
+        return f"Account locked. Try again after {remaining_minutes} minute{suffix}"
+    except (TypeError, ValueError):
+        return "Account locked. Try again later."
+
 # ==================== ENDPOINTS ====================
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     try:
         # Determine if email or username is provided
+        login_identifier = request.email.strip()
         user_query = supabase.table("users").select("*, roles(name)")
-        if "@" in request.email:
-            user_result = user_query.eq("email", request.email).execute()
+        if "@" in login_identifier:
+            user_result = user_query.ilike("email", login_identifier).execute()
         else:
-            user_result = user_query.eq("username", request.email).execute()
+            user_result = user_query.ilike("username", login_identifier).execute()
 
         if not user_result.data:
             raise HTTPException(
@@ -91,16 +118,38 @@ async def login(request: LoginRequest):
             )
 
         # Check Account Lock status
-        if user.get("locked_until"):
-            locked_until = datetime.fromisoformat(user["locked_until"].replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) < locked_until:
-                raise HTTPException(
-                    status_code=status.HTTP_423_LOCKED,
-                    detail=f"Account locked. Try again after {user['locked_until']}"
-                )
+        locked_until_value = user.get("locked_until")
+        if locked_until_value:
+            try:
+                locked_until = datetime.fromisoformat(str(locked_until_value).replace("Z", "+00:00"))
+                if locked_until.tzinfo is None:
+                    locked_until = locked_until.replace(tzinfo=timezone.utc)
+
+                if datetime.now(timezone.utc) < locked_until:
+                    raise HTTPException(
+                        status_code=status.HTTP_423_LOCKED,
+                        detail=format_lockout_message(locked_until_value)
+                    )
+
+                # Lockout has expired; clear it so the user can retry without a stale countdown.
+                supabase.table("users").update({
+                    "failed_login_attempts": 0,
+                    "locked_until": None
+                }).eq("id", user["id"]).execute()
+            except (TypeError, ValueError):
+                pass
 
         # Verify Password
-        if not verify_password(request.password, user.get("password_hash", "")):
+        password_valid = verify_password(request.password, user.get("password_hash", ""))
+
+        # Bulk-uploaded students use their roll number as the initial password.
+        # Compare it case-insensitively so Excel casing does not affect login.
+        if not password_valid and role_name == "student" and user.get("first_login", True):
+            student_profile = supabase.table("students").select("roll_number").eq("id", user["id"]).execute()
+            roll_number = student_profile.data[0].get("roll_number") if student_profile.data else None
+            password_valid = bool(roll_number and request.password.strip().lower() == str(roll_number).strip().lower())
+
+        if not password_valid:
             # Log Failed Attempt
             attempts = user.get("failed_login_attempts", 0) + 1
             update_data = {"failed_login_attempts": attempts}

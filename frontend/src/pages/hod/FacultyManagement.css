@@ -38,6 +38,22 @@
     color: #991b1b;
 }
 
+.checkbox-cell {
+    width: 42px;
+    text-align: center;
+}
+
+.table-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: #0f172a;
+    cursor: pointer;
+}
+
+.row-selected {
+    background: rgba(15, 23, 42, 0.04);
+}
+
 .user-cell {
     display: flex;
     align-items: center;

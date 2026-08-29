@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
+    # MongoDB Configuration (event images)
+    MONGODB_URI: str = "mongodb+srv://kharikumarhd690_db_user:Hari123@cluster0.2ymcs7z.mongodb.net/?appName=Cluster0"
+    MONGODB_DB_NAME: str = "college_app"
+    MONGODB_EVENTS_BUCKET: str = "event_images"
+
+    # Backend base URL used when returning stored image URLs to the frontend
+    BACKEND_BASE_URL: str = "http://localhost:8000"
+
     # Application Settings
     APP_NAME: str = "Student Management System"
     DEBUG: Union[bool, str] = True
