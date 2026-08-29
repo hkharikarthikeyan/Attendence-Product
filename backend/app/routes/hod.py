@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from ..database import supabase
 from ..middleware.auth import require_hod, CurrentUser
 from .auth import get_password_hash
+from .student import get_next_leave_status
+from ..services.event_storage import save_event_image_bytes, delete_event_image_by_url
 
 
 router = APIRouter(prefix="/api/hod", tags=["HOD"])
@@ -26,8 +28,10 @@ class FacultyUpdate(BaseModel):
     """Update faculty request."""
     name: Optional[str] = None
     mobile: Optional[str] = None
+    employee_id: Optional[str] = None
     department: Optional[str] = None
     availability_status: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class FacultyResponse(BaseModel):
@@ -65,6 +69,7 @@ class StudentUpdate(BaseModel):
     class_year: Optional[str] = None
     section: Optional[str] = None
     batch: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class StudentResponse(BaseModel):
@@ -86,6 +91,7 @@ class EventCreate(BaseModel):
     description: str
     event_date: datetime
     event_type: str = "general"  # general, academic, cultural, sports
+    image_url: Optional[str] = None
 
 
 class EventResponse(BaseModel):
@@ -96,6 +102,8 @@ class EventResponse(BaseModel):
     event_date: datetime
     event_type: str
     created_at: datetime
+    image_url: Optional[str] = None
+
 
 
 # ==================== FACULTY ROUTES ====================
@@ -154,7 +162,9 @@ async def create_faculty(
             "name": faculty.name,
             "employee_id": faculty.employee_id,
             "mobile": faculty.mobile,
-            "department_id": None # Set default to None or insert department if exists
+            "department": faculty.department,
+            "department_id": None,
+            "availability_status": True
         }).execute()
         
         return FacultyResponse(
@@ -180,16 +190,28 @@ async def update_faculty(
 ):
     """Update faculty details."""
     try:
-        update_data = {k: v for k, v in faculty.dict().items() if v is not None}
-        result = supabase.table("faculty").update(update_data).eq("id", faculty_id).execute()
-        
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Faculty not found")
-        
+        valid_fields = {"name", "mobile", "employee_id", "department", "availability_status"}
+        update_data = {k: v for k, v in faculty.dict().items() if v is not None and k in valid_fields}
+
+        if faculty.password is not None and faculty.password.strip() != "":
+            supabase.table("users").update({
+                "password_hash": get_password_hash(faculty.password)
+            }).eq("id", faculty_id).execute()
+
+        if not update_data and (faculty.password is None or faculty.password.strip() == ""):
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        if update_data:
+            result = supabase.table("faculty").update(update_data).eq("id", faculty_id).execute()
+            if not result.data:
+                raise HTTPException(status_code=404, detail="Faculty not found")
+
         # Get updated faculty with email
         updated = supabase.table("faculty").select("*, users(email)").eq("id", faculty_id).execute()
+        if not updated.data:
+            raise HTTPException(status_code=404, detail="Faculty not found")
         f = updated.data[0]
-        
+
         return FacultyResponse(
             id=f["id"],
             name=f["name"],
@@ -232,7 +254,7 @@ async def get_all_students(
 ):
     """Get all students with optional filters."""
     try:
-        query = supabase.table("students").select("*")
+        query = supabase.table("students").select("*, users(email)")
         
         if class_year:
             query = query.eq("class_year", class_year)
@@ -248,7 +270,7 @@ async def get_all_students(
             students_list.append({
                 "id": s["id"],
                 "name": s["name"],
-                "email": s.get("email", ""),
+                "email": (s.get("users") or {}).get("email", ""),
                 "register_number": s["register_number"],
                 "roll_number": s["roll_number"],
                 "mobile": s.get("mobile"),
@@ -300,6 +322,9 @@ async def create_student(
             "mobile": student.mobile,
             "father_name": student.father_name,
             "mother_name": student.mother_name,
+            "class_year": student.class_year,
+            "section": student.section,
+            "batch": student.batch,
             "class_id": None
         }).execute()
         
@@ -326,11 +351,15 @@ async def update_student(
 ):
     """Update student details."""
     try:
-        update_data = {k: v for k, v in student.dict().items() if v is not None}
+        student_data = student.dict(exclude={"email"})
+        update_data = {k: v for k, v in student_data.items() if v is not None}
         result = supabase.table("students").update(update_data).eq("id", student_id).execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="Student not found")
+
+        if student.email is not None:
+            supabase.table("users").update({"email": student.email}).eq("id", student_id).execute()
         
         updated = supabase.table("students").select("*, users(email)").eq("id", student_id).execute()
         s = updated.data[0]
@@ -366,6 +395,66 @@ async def delete_student(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== STUDENT LEAVE APPROVAL ROUTES ====================
+
+@router.get("/student-leaves")
+async def get_student_leaves(current_user: CurrentUser = Depends(require_hod)):
+    """Get student leave requests awaiting HOD approval."""
+    try:
+        result = supabase.table("leave_requests").select("*").eq("role", "student").eq("status", "pending_hod").order("created_at", desc=True).execute()
+        requests = result.data or []
+
+        for item in requests:
+            user_id = item.get("user_id")
+            item["users"] = []
+            item["students"] = []
+
+            if user_id:
+                user_result = supabase.table("users").select("email").eq("id", user_id).limit(1).execute()
+                if user_result.data:
+                    item["users"] = user_result.data
+
+                student_result = supabase.table("students").select("name, roll_number, class_year, section").eq("id", user_id).execute()
+                if student_result.data:
+                    item["students"] = student_result.data
+                    item["name"] = student_result.data[0].get("name") or item.get("name")
+
+        return {"requests": requests}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/student-leaves/{request_id}")
+async def update_student_leave(
+    request_id: str,
+    status_update: dict,
+    current_user: CurrentUser = Depends(require_hod)
+):
+    """Approve or reject a pending HOD student leave request."""
+    try:
+        existing = supabase.table("leave_requests").select("status").eq("id", request_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        current_status = existing.data[0].get("status", "pending_hod")
+        next_status = get_next_leave_status(current_status, "hod", status_update.get("status") == "approved")
+
+        result = supabase.table("leave_requests").update({
+            "status": next_status,
+            "updated_at": datetime.now().isoformat(),
+            "rejection_reason": status_update.get("rejection_reason")
+        }).eq("id", request_id).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        return {"message": f"Leave request {next_status}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== EVENTS ROUTES ====================
 
 @router.get("/events", response_model=List[EventResponse])
@@ -378,6 +467,8 @@ async def get_all_events(current_user: CurrentUser = Depends(require_hod)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
 @router.post("/events", response_model=EventResponse)
 async def create_event(
     event: EventCreate,
@@ -385,14 +476,29 @@ async def create_event(
 ):
     """Create a new event."""
     try:
+        image_url = event.image_url
+        if image_url and image_url.startswith("data:image"):
+            # image_url comes from frontend as Base64 Data URL; store a MongoDB-backed image ref instead
+            try:
+                import base64
+
+                header, _, data = image_url.partition(",")
+                mime_type = header.split(";")[0].replace("data:", "")
+                image_bytes = base64.b64decode(data)
+                filename = f"event-{datetime.utcnow().timestamp()}.png"
+                image_url = save_event_image_bytes(image_bytes, filename, mime_type)
+            except Exception:
+                image_url = event.image_url
+
         result = supabase.table("events").insert({
             "title": event.title,
             "description": event.description,
             "event_date": event.event_date.isoformat(),
             "event_type": event.event_type,
-            "created_by": current_user.id
+            "created_by": current_user.id,
+            "image_url": image_url
         }).execute()
-        
+
         return EventResponse(**result.data[0])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -410,7 +516,8 @@ async def update_event(
             "title": event.title,
             "description": event.description,
             "event_date": event.event_date.isoformat(),
-            "event_type": event.event_type
+            "event_type": event.event_type,
+            "image_url": event.image_url
         }).eq("id", event_id).execute()
         
         if not result.data:
@@ -428,12 +535,23 @@ async def delete_event(
     event_id: str,
     current_user: CurrentUser = Depends(require_hod)
 ):
-    """Delete an event."""
+    """Delete an event and the associated MongoDB GridFS image when present."""
     try:
+        existing = supabase.table("events").select("image_url").eq("id", event_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        image_url = (existing.data[0] or {}).get("image_url")
+        if image_url:
+            delete_event_image_by_url(image_url)
+
         supabase.table("events").delete().eq("id", event_id).execute()
         return {"message": "Event deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ==================== REPORTS ROUTES ====================

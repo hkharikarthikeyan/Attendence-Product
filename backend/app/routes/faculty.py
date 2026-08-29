@@ -9,7 +9,7 @@ import io
 import uuid
 from openpyxl import Workbook, load_workbook
 from ..routes.auth import get_password_hash
-
+from .student import get_next_leave_status
 
 
 router = APIRouter(prefix="/api/faculty", tags=["Faculty"])
@@ -184,11 +184,14 @@ async def mark_attendance(
             records.append({
                 "student_id": entry.student_id,
                 "faculty_id": current_user.id,
-                "subject": attendance.subject,
                 "class_year": attendance.class_year,
                 "section": attendance.section,
+                "subject": attendance.subject,
                 "date": attendance.date.isoformat(),
-                "status": entry.status
+                "status": entry.status,
+                "period": 1,
+                "class_id": None,
+                "subject_id": None
             })
         
         result = supabase.table("attendance").insert(records).execute()
@@ -273,14 +276,14 @@ async def enter_marks(
 ):
     """Enter marks for students."""
     try:
+        subject_result = supabase.table("subjects").select("id").ilike("name", marks.subject.strip()).limit(1).execute()
+        subject_id = subject_result.data[0]["id"] if subject_result.data else None
         records = []
         for entry in marks.entries:
             records.append({
                 "student_id": entry.student_id,
-                "faculty_id": current_user.id,
-                "subject": marks.subject,
-                "class_year": marks.class_year,
-                "section": marks.section,
+                "subject_id": subject_id,
+                "subject": marks.subject.strip(),
                 "exam_type": marks.exam_type,
                 "max_marks": marks.max_marks,
                 "marks_obtained": entry.marks_obtained
@@ -328,18 +331,29 @@ async def get_class_marks(
 ):
     """Get marks for a class."""
     try:
+        students_result = supabase.table("students").select("id").eq("class_year", class_year).eq("section", section).execute()
+        student_ids = [student["id"] for student in (students_result.data or [])]
+
+        if not student_ids:
+            return {"marks": []}
+
         query = supabase.table("marks").select(
-            "*, students(name, roll_number)"
-        ).eq("class_year", class_year).eq("section", section)
-        
-        if subject:
-            query = query.eq("subject", subject)
+            "*, students(name, roll_number), subjects(name)"
+        ).in_("student_id", student_ids)
+
         if exam_type:
             query = query.eq("exam_type", exam_type)
-        
+
         result = query.execute()
-        
-        return {"marks": result.data}
+        marks_data = result.data or []
+
+        if subject:
+            marks_data = [
+                item for item in marks_data
+                    if ((item.get("subjects") or {}).get("name") or item.get("subject")) == subject
+            ]
+
+        return {"marks": marks_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -411,6 +425,16 @@ async def upload_students(
         students = []
         users = []
         errors = []
+        seen_emails = set()
+
+        role_res = supabase.table("roles").select("id").eq("name", "student").execute()
+        if not role_res.data:
+            raise HTTPException(status_code=500, detail="Student role not configured in database")
+        student_role_id = role_res.data[0]["id"]
+
+        existing_users = supabase.table("users").select("email, username").execute()
+        existing_user_emails = {record.get("email", "").lower() for record in existing_users.data if record.get("email")}
+        existing_usernames = {record.get("username", "").lower() for record in existing_users.data if record.get("username")}
         
         for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             # Skip completely empty rows
@@ -434,19 +458,33 @@ async def upload_students(
 
                 # Generate missing email if needed
                 if not email:
-                    email = f"{roll_number.lower()}@student.college.edu"
+                    email = f"{register_number.lower()}@student.college.edu"
+
+                normalized_email = email.strip().lower()
+                if normalized_email in seen_emails or normalized_email in existing_user_emails:
+                    errors.append(f"Row {idx}: Duplicate email '{email}' found in file or database")
+                    continue
+                seen_emails.add(normalized_email)
 
                 # Generate User ID and Password
                 user_id = str(uuid.uuid4())
+                base_username = f"std_{register_number.lower().replace(' ', '')}"
+                username = base_username
+                username_counter = 1
+                while username.lower() in existing_usernames or username.lower() in {u.get('username', '').lower() for u in users}:
+                    username = f"{base_username}_{username_counter}"
+                    username_counter += 1
+                existing_usernames.add(username.lower())
                 # Default password is lowercased roll number for now (or a standard default)
                 default_password = roll_number.lower() 
                 password_hash = get_password_hash(default_password)
                 
                 user_entry = {
                     "id": user_id,
-                    "email": email,
+                    "email": normalized_email,
+                    "username": username,
                     "password_hash": password_hash,
-                    "role": "student",
+                    "role_id": student_role_id,
                     "created_at": datetime.now().isoformat()
                 }
 
@@ -456,12 +494,12 @@ async def upload_students(
                     "register_number": register_number,
                     "name": name,
                     "mobile": mobile,
-                    "email": email, # redundant but useful
                     "father_name": father_name,
                     "mother_name": mother_name,
                     "class_year": class_year,
                     "section": section,
-                    "batch": batch
+                    "batch": batch,
+                    "approval_status": "pending"
                 }
                 
                 students.append(student_entry)
@@ -623,31 +661,27 @@ async def delete_student(
 
 @router.get("/student-leaves")
 async def get_student_leaves(current_user: CurrentUser = Depends(require_faculty)):
-    """Get pending leave requests from students in assigned classes."""
+    """Get student leave requests awaiting faculty approval."""
     try:
-        # First get assigned classes
-        assignments = supabase.table("faculty_classes").select("class_id").eq("faculty_id", current_user.id).execute()
-        class_ids = [a["class_id"] for a in assignments.data]
-        
-        if not class_ids:
-            return {"requests": []}
+        result = supabase.table("leave_requests").select("*").eq("role", "student").eq("status", "pending_faculty").order("created_at", desc=True).execute()
+        requests = result.data or []
 
-        # Get students in these classes (This is a simplified approach; 
-        # ideally we join or filter leaves by student IDs who are in these classes)
-        # For now, we'll fetch all pending student leaves and filter? 
-        # Or better: Get all pending leaves where role='student' (for now, assuming faculty manages all students 
-        # or we implement proper class-based filtering later. 
-        # Given the schema, we can join: leave_requests -> users -> student_profiles -> classes
-        # But for MVP compliance with prompt:
-        
-        query = supabase.table("leave_requests").select(
-            "*, users:user_id(email), students:user_id(name, roll_number, class_year, section)"
-        ).eq("role", "student").eq("status", "pending").order("created_at", desc=True)
-        
-        result = query.execute()
-        
-        # Filter by assigned classes locally if needed, but for now return all
-        return {"requests": result.data}
+        for item in requests:
+            user_id = item.get("user_id")
+            item["users"] = []
+            item["students"] = []
+
+            if user_id:
+                user_result = supabase.table("users").select("email").eq("id", user_id).limit(1).execute()
+                if user_result.data:
+                    item["users"] = user_result.data
+
+                student_result = supabase.table("students").select("name, roll_number, class_year, section").eq("id", user_id).execute()
+                if student_result.data:
+                    item["students"] = student_result.data
+                    item["name"] = student_result.data[0].get("name") or item.get("name")
+
+        return {"requests": requests}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -660,19 +694,25 @@ async def update_student_leave(
 ):
     """Approve or reject a student leave request."""
     try:
+        existing = supabase.table("leave_requests").select("status").eq("id", request_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        current_status = existing.data[0].get("status", "pending_faculty")
+        next_status = get_next_leave_status(current_status, "faculty", status_update.status == "approved")
+
         update_data = {
-            "status": status_update.status,
+            "status": next_status,
             "updated_at": datetime.now().isoformat()
         }
         if status_update.rejection_reason:
             update_data["rejection_reason"] = status_update.rejection_reason
-            
+
         result = supabase.table("leave_requests").update(update_data).eq("id", request_id).execute()
-        
         if not result.data:
             raise HTTPException(status_code=404, detail="Request not found")
-            
-        return {"message": f"Leave request {status_update.status}"}
+
+        return {"message": f"Leave request {next_status}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -705,7 +745,14 @@ async def get_my_leaves(current_user: CurrentUser = Depends(require_faculty)):
     """Get own leave history."""
     try:
         result = supabase.table("leave_requests").select("*").eq("user_id", current_user.id).order("created_at", desc=True).execute()
-        return {"requests": result.data}
+        faculty_result = supabase.table("faculty").select("name").eq("id", current_user.id).limit(1).execute()
+        faculty_name = (faculty_result.data or [{}])[0].get("name") or current_user.email or "N/A"
+
+        requests = result.data or []
+        for item in requests:
+            item["name"] = item.get("name") or faculty_name
+
+        return {"requests": requests}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

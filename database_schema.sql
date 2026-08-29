@@ -99,7 +99,9 @@ CREATE TABLE IF NOT EXISTS public.faculty (
     employee_id VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(150) NOT NULL,
     mobile VARCHAR(20),
+    department VARCHAR(150),
     department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
+    availability_status BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE
@@ -115,10 +117,15 @@ CREATE TABLE IF NOT EXISTS public.students (
     roll_number VARCHAR(50) UNIQUE NOT NULL,
     register_number VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(150) NOT NULL,
+    class_year VARCHAR(50),
+    section VARCHAR(20),
+    batch VARCHAR(50),
     class_id UUID REFERENCES public.classes(id) ON DELETE SET NULL,
     mobile VARCHAR(20),
     father_name VARCHAR(150),
     mother_name VARCHAR(150),
+    profile_photo TEXT,
+    approval_status VARCHAR(30) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE
@@ -132,15 +139,19 @@ CREATE INDEX IF NOT EXISTS idx_students_register ON public.students(register_num
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.attendance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    class_id UUID NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
-    subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
-    faculty_id UUID NOT NULL REFERENCES public.faculty(id) ON DELETE SET NULL,
+    student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
+    faculty_id UUID REFERENCES public.faculty(id) ON DELETE SET NULL,
+    class_year VARCHAR(50),
+    section VARCHAR(20),
+    subject VARCHAR(150),
     date DATE NOT NULL,
-    period INT NOT NULL,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('present', 'absent', 'late', 'od')),
+    period INT DEFAULT 1,
+    class_id UUID REFERENCES public.classes(id) ON DELETE SET NULL,
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    deleted_at TIMESTAMP WITH TIME ZONE,
-    UNIQUE(class_id, subject_id, date, period)
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX IF NOT EXISTS idx_attendance_date ON public.attendance(date);
@@ -167,7 +178,8 @@ CREATE INDEX IF NOT EXISTS idx_attendance_details_student ON public.attendance_d
 CREATE TABLE IF NOT EXISTS public.marks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-    subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE,
+    subject VARCHAR(150),
     exam_type VARCHAR(50) NOT NULL CHECK (exam_type IN ('internal1', 'internal2', 'internal3', 'external', 'lab', 'assignment')),
     max_marks NUMERIC(5, 2) NOT NULL,
     marks_obtained NUMERIC(5, 2) NOT NULL,
@@ -184,8 +196,11 @@ CREATE TABLE IF NOT EXISTS public.assignments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE,
+    subject VARCHAR(150),
     faculty_id UUID NOT NULL REFERENCES public.faculty(id) ON DELETE SET NULL,
+    class_year VARCHAR(50) NOT NULL,
+    section VARCHAR(20) NOT NULL,
     deadline TIMESTAMP WITH TIME ZONE NOT NULL,
     max_marks NUMERIC(5, 2) NOT NULL,
     file_url TEXT,
@@ -234,11 +249,37 @@ CREATE TABLE IF NOT EXISTS public.project_team (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    is_lead BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE,
     UNIQUE(project_id, student_id)
 );
+
+ALTER TABLE public.project_team ADD COLUMN IF NOT EXISTS is_lead BOOLEAN DEFAULT FALSE;
+
+-- ==========================================
+-- 14.5 PROJECT PROGRESS
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.project_progress (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL UNIQUE REFERENCES public.projects(id) ON DELETE CASCADE,
+    phase_1_mark NUMERIC(5,2) DEFAULT 0,
+    phase_2_mark NUMERIC(5,2) DEFAULT 0,
+    phase_3_mark NUMERIC(5,2) DEFAULT 0,
+    current_phase VARCHAR(20) DEFAULT 'phase_1',
+    completion_percentage INT DEFAULT 0,
+    faculty_status VARCHAR(30) DEFAULT 'pending' CHECK (faculty_status IN ('pending', 'approved', 'rejected')),
+    hod_status VARCHAR(30) DEFAULT 'pending' CHECK (hod_status IN ('pending', 'approved', 'rejected')),
+    faculty_comment TEXT,
+    hod_comment TEXT,
+    team_lead_student_id UUID REFERENCES public.students(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS team_lead_student_id UUID REFERENCES public.students(id) ON DELETE SET NULL;
 
 -- ==========================================
 -- 15. EVENTS
@@ -326,7 +367,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
     from_date DATE NOT NULL,
     to_date DATE NOT NULL,
     reason TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'pending_faculty', 'pending_hod', 'approved', 'rejected')),
     rejection_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -353,6 +394,7 @@ ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assignment_submission ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_team ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
@@ -377,6 +419,7 @@ CREATE POLICY "Allow all for service role" ON public.assignments FOR ALL USING (
 CREATE POLICY "Allow all for service role" ON public.assignment_submission FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.projects FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.project_team FOR ALL USING (true);
+CREATE POLICY "Allow all for service role" ON public.project_progress FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.events FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.notifications FOR ALL USING (true);
 CREATE POLICY "Allow all for service role" ON public.activity_logs FOR ALL USING (true);

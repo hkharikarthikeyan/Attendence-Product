@@ -31,6 +31,7 @@ const StudentManagement = () => {
     const [success, setSuccess] = useState('');
 
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+    const [selectedStudentIds, setSelectedStudentIds] = useState([]);
 
     useEffect(() => { loadStudents(); }, [filters]);
 
@@ -41,6 +42,7 @@ const StudentManagement = () => {
             );
             const data = await hodAPI.getStudents(activeFilters);
             setStudents(data.students || data);
+            setSelectedStudentIds([]);
         } catch (err) {
             setError('Failed to load students');
         } finally {
@@ -87,11 +89,13 @@ const StudentManagement = () => {
         setError('');
         try {
             if (editingStudent) {
-                await hodAPI.updateStudent(editingStudent.id, {
+                const updateData = {
+                    email: formData.email.trim() || undefined,
                     name: formData.name, mobile: formData.mobile,
                     father_name: formData.father_name, mother_name: formData.mother_name,
                     class_year: formData.class_year, section: formData.section, batch: formData.batch,
-                });
+                };
+                await hodAPI.updateStudent(editingStudent.id, updateData);
                 setSuccess('Student updated successfully');
             } else {
                 await hodAPI.createStudent(formData);
@@ -112,6 +116,36 @@ const StudentManagement = () => {
             loadStudents();
         } catch (err) {
             setError(err.message || 'Failed to delete student');
+        }
+    };
+
+    const toggleStudentSelection = (studentId) => {
+        setSelectedStudentIds((prev) =>
+            prev.includes(studentId)
+                ? prev.filter((id) => id !== studentId)
+                : [...prev, studentId]
+        );
+    };
+
+    const handleSelectAll = () => {
+        if (selectedStudentIds.length === sortedStudents.length && sortedStudents.length > 0) {
+            setSelectedStudentIds([]);
+            return;
+        }
+        setSelectedStudentIds(sortedStudents.map((student) => student.id));
+    };
+
+    const handleDeleteSelected = async () => {
+        if (selectedStudentIds.length === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedStudentIds.length} selected student(s)?`)) return;
+
+        try {
+            await Promise.all(selectedStudentIds.map((id) => hodAPI.deleteStudent(id)));
+            setSelectedStudentIds([]);
+            setSuccess('Selected students deleted successfully');
+            loadStudents();
+        } catch (err) {
+            setError(err.message || 'Failed to delete selected students');
         }
     };
 
@@ -233,6 +267,11 @@ const StudentManagement = () => {
                     </svg>
                     Add Student
                 </button>
+                {selectedStudentIds.length > 0 && (
+                    <button className="btn btn-danger" onClick={handleDeleteSelected}>
+                        Delete Selected ({selectedStudentIds.length})
+                    </button>
+                )}
                 <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '18px', height: '18px' }}>
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -286,6 +325,15 @@ const StudentManagement = () => {
                 <table className="table">
                     <thead>
                         <tr>
+                            <th className="checkbox-cell">
+                                <input
+                                    type="checkbox"
+                                    className="table-checkbox"
+                                    checked={sortedStudents.length > 0 && selectedStudentIds.length === sortedStudents.length}
+                                    onChange={handleSelectAll}
+                                    aria-label="Select all students"
+                                />
+                            </th>
                             <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
                                 Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
@@ -308,7 +356,16 @@ const StudentManagement = () => {
                     <tbody>
                         {sortedStudents.length > 0 ? (
                             sortedStudents.map((s) => (
-                                <tr key={s.id}>
+                                <tr key={s.id} className={selectedStudentIds.includes(s.id) ? 'row-selected' : ''}>
+                                    <td className="checkbox-cell">
+                                        <input
+                                            type="checkbox"
+                                            className="table-checkbox"
+                                            checked={selectedStudentIds.includes(s.id)}
+                                            onChange={() => toggleStudentSelection(s.id)}
+                                            aria-label={`Select ${s.name}`}
+                                        />
+                                    </td>
                                     <td>
                                         <div className="user-cell">
                                             <div className="user-avatar">{s.name.charAt(0)}</div>
@@ -345,7 +402,7 @@ const StudentManagement = () => {
                                 </tr>
                             ))
                         ) : (
-                            <tr><td colSpan="7" className="text-center text-muted">No students found</td></tr>
+                            <tr><td colSpan="8" className="text-center text-muted">No students found</td></tr>
                         )}
                     </tbody>
                 </table>

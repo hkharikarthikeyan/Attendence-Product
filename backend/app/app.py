@@ -1,7 +1,20 @@
+import os
+import sys
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .config import settings
-from .routes import auth, hod, faculty, student, assignments, projects, settings as sys_settings, notifications
+from fastapi.responses import StreamingResponse
+from .services.event_storage import get_event_image_file
+
+if __package__ in (None, ""):
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from app.config import settings
+    from app.routes import auth, hod, faculty, student, assignments, projects, settings as sys_settings, notifications
+else:
+    from .config import settings
+    from .routes import auth, hod, faculty, student, assignments, projects, settings as sys_settings, notifications
 
 
 # Create FastAPI application
@@ -54,6 +67,15 @@ async def health_check():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
+
+@app.get("/api/hod/event-images/{image_id}")
+async def serve_event_image(image_id: str):
+    try:
+        file_obj = get_event_image_file(image_id)
+        return StreamingResponse(file_obj, media_type=file_obj.content_type or "application/octet-stream")
+    except FileNotFoundError:
+        return {"detail": "Event image not found"}
 
 
 if __name__ == "__main__":

@@ -52,7 +52,7 @@ const menuItems = [
     { path: '/faculty/students', label: 'Student Upload', icon: <UploadIcon /> },
     { path: '/faculty/attendance', label: 'Mark Attendance', icon: <CheckIcon /> },
     { path: '/faculty/marks', label: 'Enter Marks', icon: <EditIcon /> },
-    { path: '/faculty/submissions', label: 'Evaluate Submissions', icon: <FileIcon /> },
+    { path: '/faculty/assignments', label: 'Assignments', icon: <FileIcon /> },
     { path: '/faculty/projects', label: 'Manage Teams', icon: <FileIcon /> },
     { path: '/faculty/leave', label: 'Leave Request', icon: <FileIcon /> },
     { path: '/faculty/events', label: 'Events', icon: <CalendarIcon /> },
