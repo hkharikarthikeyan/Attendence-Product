@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date
-from ..database import supabase
+from ..database import supabase, supabase_admin
 from ..middleware.auth import require_faculty, CurrentUser
 import io
 import uuid
@@ -156,16 +156,130 @@ async def get_students_by_class(
 ):
     """Get students for a specific class."""
     try:
+        advisor_result = supabase_admin.table("class_advisor_assignments").select("class_year, section").eq("faculty_id", current_user.id).execute()
+        advisor_classes = {(row["class_year"], row["section"]) for row in (advisor_result.data or [])}
+
+        requested = (class_year, section)
+        if requested not in advisor_classes:
+            raise HTTPException(status_code=403, detail="You are not assigned as class advisor for this class")
+
         query = supabase.table("students").select(
-            "id, name, register_number, roll_number, batch"
+            "id, name, register_number, roll_number, batch, class_year, section"
         ).eq("class_year", class_year).eq("section", section)
-        
+
         if batch:
             query = query.eq("batch", batch)
-            
+
         result = query.order("roll_number").execute()
-        
+
         return {"students": result.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/my-class")
+async def get_my_class(current_user: CurrentUser = Depends(require_faculty)):
+    """Return all class assignments belonging to the current faculty as class advisor."""
+    try:
+        result = supabase_admin.table("class_advisor_assignments").select("*, faculty(name, employee_id)").eq("faculty_id", current_user.id).execute()
+        assignments = result.data or []
+
+        student_rows = []
+        for assignment in assignments:
+            class_year = assignment.get("class_year")
+            section = assignment.get("section")
+            if not class_year or not section:
+                continue
+
+            students = supabase.table("students").select("id, name, register_number, roll_number, class_year, section, batch").eq("class_year", class_year).eq("section", section).order("roll_number").execute()
+            student_rows.extend(students.data or [])
+
+        return {"assignments": assignments, "students": student_rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/student/{student_id}/details")
+async def get_student_detail(
+    student_id: str,
+    current_user: CurrentUser = Depends(require_faculty)
+):
+    """Get one student's full academic profile for faculty view."""
+    try:
+        student_result = supabase.table("students").select("*").eq("id", student_id).execute()
+        if not student_result.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        student = student_result.data[0]
+        allowed = supabase_admin.table("class_advisor_assignments").select("id").eq("faculty_id", current_user.id).eq("class_year", student.get("class_year")).eq("section", student.get("section")).execute()
+        if not allowed.data:
+            raise HTTPException(status_code=403, detail="This student is not in your assigned class")
+
+        user_result = supabase.table("users").select("email").eq("id", student_id).execute()
+        email = (user_result.data or [{}])[0].get("email") or "Not provided"
+
+        attendance_result = supabase.table("attendance").select("status").eq("student_id", student_id).execute()
+        attendance_records = attendance_result.data or []
+        total_classes = len(attendance_records)
+        present = sum(1 for a in attendance_records if a.get("status") == "present")
+        attendance_percentage = round((present / total_classes * 100), 2) if total_classes else 0
+
+        marks_result = supabase.table("marks").select("*, subjects(name)").eq("student_id", student_id).execute()
+        marks_records = marks_result.data or []
+        subject_map = {}
+        for record in marks_records:
+            subject_name = (record.get("subjects") or {}).get("name") or record.get("subject") or "Unknown"
+            if subject_name not in subject_map:
+                subject_map[subject_name] = {
+                    "subject": subject_name,
+                    "total_marks": 0,
+                    "max_marks": 0,
+                    "records": []
+                }
+            subject_map[subject_name]["total_marks"] += float(record.get("marks_obtained") or 0)
+            subject_map[subject_name]["max_marks"] += float(record.get("max_marks") or 0)
+            subject_map[subject_name]["records"].append({
+                "exam_type": record.get("exam_type"),
+                "marks_obtained": record.get("marks_obtained"),
+                "max_marks": record.get("max_marks")
+            })
+
+        subject_breakdown = []
+        for item in subject_map.values():
+            percentage = round((item["total_marks"] / item["max_marks"] * 100), 2) if item["max_marks"] else 0
+            subject_breakdown.append({
+                "subject": item["subject"],
+                "percentage": percentage,
+                "marks_obtained": item["total_marks"],
+                "max_marks": item["max_marks"],
+                "records": item["records"]
+            })
+
+        return {
+            "student": {
+                "id": student.get("id"),
+                "name": student.get("name"),
+                "roll_number": student.get("roll_number"),
+                "register_number": student.get("register_number"),
+                "email": email,
+                "father_name": student.get("father_name"),
+                "mother_name": student.get("mother_name"),
+                "class_year": student.get("class_year"),
+                "section": student.get("section"),
+                "batch": student.get("batch"),
+                "mobile": student.get("mobile")
+            },
+            "attendance": {
+                "total_classes": total_classes,
+                "present": present,
+                "percentage": attendance_percentage
+            },
+            "marks": subject_breakdown
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -661,27 +775,35 @@ async def delete_student(
 
 @router.get("/student-leaves")
 async def get_student_leaves(current_user: CurrentUser = Depends(require_faculty)):
-    """Get student leave requests awaiting faculty approval."""
+    """Get student leave requests awaiting faculty approval for this faculty's assigned class only."""
     try:
+        advisor_assignments = supabase_admin.table("class_advisor_assignments").select("class_year, section").eq("faculty_id", current_user.id).execute()
+        allowed_classes = {(row["class_year"], row["section"]) for row in (advisor_assignments.data or [])}
+
+        if not allowed_classes:
+            return {"requests": []}
+
         result = supabase.table("leave_requests").select("*").eq("role", "student").eq("status", "pending_faculty").order("created_at", desc=True).execute()
         requests = result.data or []
+        filtered = []
 
         for item in requests:
             user_id = item.get("user_id")
-            item["users"] = []
-            item["students"] = []
+            if not user_id:
+                continue
 
-            if user_id:
-                user_result = supabase.table("users").select("email").eq("id", user_id).limit(1).execute()
-                if user_result.data:
-                    item["users"] = user_result.data
+            student_result = supabase.table("students").select("name, roll_number, class_year, section").eq("id", user_id).execute()
+            student = (student_result.data or [{}])[0]
+            class_year = student.get("class_year")
+            section = student.get("section")
 
-                student_result = supabase.table("students").select("name, roll_number, class_year, section").eq("id", user_id).execute()
-                if student_result.data:
-                    item["students"] = student_result.data
-                    item["name"] = student_result.data[0].get("name") or item.get("name")
+            if (class_year, section) in allowed_classes:
+                item["users"] = []
+                item["students"] = student_result.data or []
+                item["name"] = student.get("name") or item.get("name")
+                filtered.append(item)
 
-        return {"requests": requests}
+        return {"requests": filtered}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -692,11 +814,19 @@ async def update_student_leave(
     status_update: LeaveStatusUpdate,
     current_user: CurrentUser = Depends(require_faculty)
 ):
-    """Approve or reject a student leave request."""
+    """Approve or reject a student leave request assigned to this faculty's class only."""
     try:
-        existing = supabase.table("leave_requests").select("status").eq("id", request_id).execute()
+        existing = supabase.table("leave_requests").select("user_id, status").eq("id", request_id).execute()
         if not existing.data:
             raise HTTPException(status_code=404, detail="Request not found")
+
+        student_id = existing.data[0].get("user_id")
+        student_result = supabase.table("students").select("class_year, section").eq("id", student_id).execute()
+        student = (student_result.data or [{}])[0]
+        allowed = supabase_admin.table("class_advisor_assignments").select("id").eq("faculty_id", current_user.id).eq("class_year", student.get("class_year")).eq("section", student.get("section")).execute()
+
+        if not allowed.data:
+            raise HTTPException(status_code=403, detail="This request is not assigned to your class")
 
         current_status = existing.data[0].get("status", "pending_faculty")
         next_status = get_next_leave_status(current_status, "faculty", status_update.status == "approved")
@@ -713,6 +843,8 @@ async def update_student_leave(
             raise HTTPException(status_code=404, detail="Request not found")
 
         return {"message": f"Leave request {next_status}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
