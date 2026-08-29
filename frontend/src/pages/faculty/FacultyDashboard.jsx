@@ -69,6 +69,11 @@ const FacultyLayout = () => {
 
 const FacultyDashboard = () => {
     const [profile, setProfile] = useState(null);
+    const [myClass, setMyClass] = useState({ assignments: [], students: [] });
+    const [studentRoster, setStudentRoster] = useState([]);
+    const [showStudentList, setShowStudentList] = useState(false);
+    const [selectedStudent, setSelectedStudent] = useState(null);
+    const [selectedStudentDetail, setSelectedStudentDetail] = useState(null);
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -88,6 +93,21 @@ const FacultyDashboard = () => {
                 setProfile({ name: 'Faculty' }); // Fallback
             }
 
+            // Load class assignments - handle gracefully
+            try {
+                const classData = await facultyAPI.getMyClass();
+                const students = classData.students || [];
+                setMyClass({
+                    assignments: classData.assignments || [],
+                    students,
+                });
+                setStudentRoster(students.map((student) => ({ ...student, attendance_percentage: 0 })));
+            } catch (err) {
+                console.error('Failed to load class assignments:', err);
+                setMyClass({ assignments: [], students: [] });
+                setStudentRoster([]);
+            }
+
             // Load events - handle error gracefully  
             try {
                 const eventsData = await facultyAPI.getEvents();
@@ -101,6 +121,67 @@ const FacultyDashboard = () => {
             setError('Failed to load some data. Please try again.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleShowStudents = async () => {
+        if (!myClass.assignments.length) {
+            setStudentRoster([]);
+            setShowStudentList(true);
+            return;
+        }
+
+        try {
+            const uniqueClasses = [];
+            const seen = new Set();
+            myClass.assignments.forEach((assignment) => {
+                const key = `${assignment.class_year}-${assignment.section}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueClasses.push({ class_year: assignment.class_year, section: assignment.section });
+                }
+            });
+
+            const attendanceMap = {};
+            for (const item of uniqueClasses) {
+                const summary = await facultyAPI.getAttendanceSummary(item.class_year, item.section);
+                (summary.summary || []).forEach((row) => {
+                    attendanceMap[row.student_id] = row.percentage;
+                });
+            }
+
+            const roster = (myClass.students || []).map((student) => ({
+                ...student,
+                attendance_percentage: attendanceMap[student.id] ?? 0,
+            }));
+
+            setStudentRoster(roster);
+            setShowStudentList(true);
+        } catch (err) {
+            console.error('Failed to load student roster:', err);
+            setStudentRoster((myClass.students || []).map((student) => ({ ...student, attendance_percentage: 0 })));
+            setShowStudentList(true);
+        }
+    };
+
+    const handleStudentDetails = async (student) => {
+        try {
+            const detail = await facultyAPI.getStudentDetails(student.id);
+            setSelectedStudent(student);
+            setSelectedStudentDetail(detail);
+        } catch (err) {
+            console.error('Failed to load student details:', err);
+            setSelectedStudent(student);
+            setSelectedStudentDetail({
+                student: {
+                    ...student,
+                    email: 'Not provided',
+                    father_name: 'Not provided',
+                    mother_name: 'Not provided',
+                },
+                attendance: { total_classes: 0, present: 0, percentage: 0 },
+                marks: [],
+            });
         }
     };
 
@@ -147,6 +228,130 @@ const FacultyDashboard = () => {
             </div>
 
             <div className="dashboard-grid">
+                <div className="card">
+                    <div className="card-header"><h3>My Class</h3></div>
+                    <div className="card-body">
+                        {myClass.assignments.length > 0 ? (
+                            <div>
+                                <p style={{ marginBottom: '0.75rem' }}>
+                                    Assigned classes: {myClass.assignments.map((a) => `${a.class_year} / ${a.section}`).join(', ')}
+                                </p>
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ marginBottom: '1rem' }}
+                                    onClick={handleShowStudents}
+                                >
+                                    Show Students
+                                </button>
+                                {showStudentList && (
+                                    <div style={{ marginTop: '1rem' }}>
+                                        {studentRoster.length > 0 ? (
+                                            <div className="table-container">
+                                                <table className="table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Name</th>
+                                                            <th>Roll No</th>
+                                                            <th>Register No</th>
+                                                            <th>Attendance %</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {studentRoster.map((student) => (
+                                                            <tr key={student.id}>
+                                                                <td>
+                                                                    <button
+                                                                        className="btn btn-link"
+                                                                        onClick={() => handleStudentDetails(student)}
+                                                                        style={{ padding: 0, textAlign: 'left', color: '#0b4d7a', fontWeight: 600 }}
+                                                                    >
+                                                                        {student.name}
+                                                                    </button>
+                                                                </td>
+                                                                <td>{student.roll_number}</td>
+                                                                <td>{student.register_number}</td>
+                                                                <td>{student.attendance_percentage.toFixed(2)}%</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <p className="text-muted text-center">No students in this class yet</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-muted text-center">No class assignments yet</p>
+                        )}
+                    </div>
+                </div>
+
+                {selectedStudentDetail && (
+                    <div className="modal-overlay" onClick={() => setSelectedStudentDetail(null)}>
+                        <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <h3>{selectedStudentDetail.student.name}</h3>
+                                <button className="btn btn-icon" onClick={() => setSelectedStudentDetail(null)}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="modal-body">
+                                <div className="student-details">
+                                    <div className="detail-row"><span className="detail-label">Name:</span><span className="detail-value">{selectedStudentDetail.student.name}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Roll No:</span><span className="detail-value">{selectedStudentDetail.student.roll_number}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Register Number:</span><span className="detail-value">{selectedStudentDetail.student.register_number}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Attendance %:</span><span className="detail-value">{selectedStudentDetail.attendance.percentage}%</span></div>
+                                    <div className="detail-row"><span className="detail-label">Email:</span><span className="detail-value">{selectedStudentDetail.student.email}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Father Name:</span><span className="detail-value">{selectedStudentDetail.student.father_name || 'Not provided'}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Mother Name:</span><span className="detail-value">{selectedStudentDetail.student.mother_name || 'Not provided'}</span></div>
+                                    <div className="detail-row"><span className="detail-label">Class:</span><span className="detail-value">{selectedStudentDetail.student.class_year} / {selectedStudentDetail.student.section}</span></div>
+                                </div>
+
+                                <h4 style={{ marginTop: '1.25rem', marginBottom: '0.75rem' }}>Performance & Internal Marks</h4>
+                                {selectedStudentDetail.marks.length > 0 ? (
+                                    <div className="table-container">
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Subject</th>
+                                                    <th>Marks</th>
+                                                    <th>Average %</th>
+                                                    <th>Exam Records</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selectedStudentDetail.marks.map((item, index) => (
+                                                    <tr key={`${item.subject}-${index}`}>
+                                                        <td>{item.subject}</td>
+                                                        <td>{item.marks_obtained} / {item.max_marks}</td>
+                                                        <td>{item.percentage}%</td>
+                                                        <td>
+                                                            {item.records.map((record, i) => (
+                                                                <div key={`${record.exam_type}-${i}`}>
+                                                                    {record.exam_type}: {record.marks_obtained}/{record.max_marks}
+                                                                </div>
+                                                            ))}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted">No marks available for this student yet.</p>
+                                )}
+                            </div>
+                            <div className="modal-footer">
+                                <button className="btn btn-secondary" onClick={() => setSelectedStudentDetail(null)}>Close</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="card">
                     <div className="card-header"><h3>Quick Actions</h3></div>
                     <div className="card-body">

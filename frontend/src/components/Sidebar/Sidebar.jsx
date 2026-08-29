@@ -8,7 +8,7 @@ const Sidebar = ({ role, menuItems }) => {
 
     const handleLogout = () => {
         logout();
-        navigate('/login');
+        navigate('/login', { replace: true });
     };
 
     const getRoleLabel = () => {
