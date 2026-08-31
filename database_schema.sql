@@ -292,12 +292,24 @@ CREATE TABLE IF NOT EXISTS public.project_progress (
     faculty_comment TEXT,
     hod_comment TEXT,
     team_lead_student_id UUID REFERENCES public.students(id) ON DELETE SET NULL,
+    faculty_phase_1_status VARCHAR(30) DEFAULT 'pending',
+    faculty_phase_1_comment TEXT,
+    faculty_phase_2_status VARCHAR(30) DEFAULT 'pending',
+    faculty_phase_2_comment TEXT,
+    faculty_phase_3_status VARCHAR(30) DEFAULT 'pending',
+    faculty_phase_3_comment TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS team_lead_student_id UUID REFERENCES public.students(id) ON DELETE SET NULL;
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_1_status VARCHAR(30) DEFAULT 'pending';
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_1_comment TEXT;
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_2_status VARCHAR(30) DEFAULT 'pending';
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_2_comment TEXT;
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_3_status VARCHAR(30) DEFAULT 'pending';
+ALTER TABLE public.project_progress ADD COLUMN IF NOT EXISTS faculty_phase_3_comment TEXT;
 
 -- ==========================================
 -- 15. EVENTS

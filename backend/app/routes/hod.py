@@ -252,6 +252,30 @@ async def delete_faculty(
 
 # ==================== STUDENT ROUTES ====================
 
+@router.get("/students/batches")
+async def get_student_batches(current_user: CurrentUser = Depends(require_hod)):
+    """Get all unique batch values from students for the batch filter."""
+    try:
+        result = supabase.table("students").select("batch").execute()
+
+        batch_counts = {}
+        for s in result.data:
+            batch = s.get("batch") or ""
+            if not batch:
+                continue
+            if batch not in batch_counts:
+                batch_counts[batch] = 0
+            batch_counts[batch] += 1
+
+        batches = [
+            {"batch": b, "count": c}
+            for b, c in sorted(batch_counts.items())
+        ]
+        return {"batches": batches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/students")
 async def get_all_students(
     class_year: Optional[str] = None,

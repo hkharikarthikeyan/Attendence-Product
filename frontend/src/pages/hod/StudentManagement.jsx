@@ -32,8 +32,22 @@ const StudentManagement = () => {
 
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
     const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+    const [availableBatches, setAvailableBatches] = useState([]);
 
     useEffect(() => { loadStudents(); }, [filters]);
+
+    useEffect(() => {
+        loadBatches();
+    }, []);
+
+    const loadBatches = async () => {
+        try {
+            const data = await hodAPI.getBatches();
+            setAvailableBatches(data.batches || []);
+        } catch (err) {
+            console.error('Failed to load batches:', err);
+        }
+    };
 
     const loadStudents = async () => {
         try {
@@ -319,6 +333,21 @@ const StudentManagement = () => {
                         <option value="C">C</option>
                     </select>
                 </div>
+                <div className="form-group">
+                    <label className="form-label">Batch</label>
+                    <select
+                        className="form-input form-select"
+                        value={filters.batch}
+                        onChange={(e) => setFilters({ ...filters, batch: e.target.value })}
+                    >
+                        <option value="">All Batches</option>
+                        {availableBatches.map((b) => (
+                            <option key={b.batch} value={b.batch}>
+                                {b.batch} ({b.count} students)
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             <div className="table-container">
@@ -349,6 +378,9 @@ const StudentManagement = () => {
                             <th onClick={() => handleSort('section')} style={{ cursor: 'pointer' }}>
                                 Section {sortConfig.key === 'section' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
+                            <th onClick={() => handleSort('batch')} style={{ cursor: 'pointer' }}>
+                                Batch {sortConfig.key === 'batch' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
                             <th>Mobile</th>
                             <th>Actions</th>
                         </tr>
@@ -376,6 +408,11 @@ const StudentManagement = () => {
                                     <td>{s.roll_number}</td>
                                     <td>{s.class_year || '-'}</td>
                                     <td>{s.section || '-'}</td>
+                                    <td>
+                                        {s.batch ? (
+                                            <span className="badge badge-info">{s.batch}</span>
+                                        ) : '-'}
+                                    </td>
                                     <td>{s.mobile || '-'}</td>
                                     <td>
                                         <div className="action-buttons">
@@ -402,7 +439,7 @@ const StudentManagement = () => {
                                 </tr>
                             ))
                         ) : (
-                            <tr><td colSpan="8" className="text-center text-muted">No students found</td></tr>
+                            <tr><td colSpan="9" className="text-center text-muted">No students found</td></tr>
                         )}
                     </tbody>
                 </table>

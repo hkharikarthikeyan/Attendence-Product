@@ -50,20 +50,33 @@ async def safe_project_progress(project_id: str) -> Dict[str, Any]:
     except Exception:
         progress = {}
 
+    defaults = {
+        "project_id": project_id,
+        "phase_1_mark": 0,
+        "phase_2_mark": 0,
+        "phase_3_mark": 0,
+        "current_phase": "phase_1",
+        "completion_percentage": 0,
+        "faculty_status": "pending",
+        "hod_status": "pending",
+        "faculty_comment": "",
+        "hod_comment": "",
+        "team_lead_student_id": None,
+        "faculty_phase_1_status": "pending",
+        "faculty_phase_1_comment": "",
+        "faculty_phase_2_status": "pending",
+        "faculty_phase_2_comment": "",
+        "faculty_phase_3_status": "pending",
+        "faculty_phase_3_comment": "",
+    }
+
     if not progress:
-        return {
-            "project_id": project_id,
-            "phase_1_mark": 0,
-            "phase_2_mark": 0,
-            "phase_3_mark": 0,
-            "current_phase": "phase_1",
-            "completion_percentage": 0,
-            "faculty_status": "pending",
-            "hod_status": "pending",
-            "faculty_comment": "",
-            "hod_comment": "",
-            "team_lead_student_id": None,
-        }
+        return defaults
+
+    # Merge defaults for any missing keys (handles pre-migration DBs)
+    for key, default_val in defaults.items():
+        if key not in progress or progress[key] is None:
+            progress[key] = default_val
 
     progress["completion_percentage"] = calculate_status_score(progress)
     return progress
@@ -93,6 +106,8 @@ class TeamCreate(BaseModel):
 class ProjectProgressReview(BaseModel):
     faculty_status: str = "approved"
     faculty_comment: Optional[str] = None
+    phase: Optional[str] = None  # e.g. "phase_1", "phase_2", "phase_3"
+    phase_mark: Optional[int] = None  # Mark for the specific phase (0-100)
 
 
 class ProjectProgressMarking(BaseModel):
@@ -132,6 +147,13 @@ async def attach_project_progress(project: Dict[str, Any]) -> Dict[str, Any]:
     project["hod_status"] = progress.get("hod_status", "pending")
     project["team_lead_student_id"] = lead_student_id
     project["team_lead_name"] = lead_name
+    # Per-phase faculty review statuses
+    project["faculty_phase_1_status"] = progress.get("faculty_phase_1_status", "pending")
+    project["faculty_phase_1_comment"] = progress.get("faculty_phase_1_comment", "")
+    project["faculty_phase_2_status"] = progress.get("faculty_phase_2_status", "pending")
+    project["faculty_phase_2_comment"] = progress.get("faculty_phase_2_comment", "")
+    project["faculty_phase_3_status"] = progress.get("faculty_phase_3_status", "pending")
+    project["faculty_phase_3_comment"] = progress.get("faculty_phase_3_comment", "")
     return project
 
 
@@ -318,19 +340,103 @@ async def update_project_phase(project_id: str, update: ProjectPhaseUpdate, curr
 async def faculty_review_project(project_id: str, review: ProjectProgressReview, current_user: CurrentUser = Depends(require_faculty)):
     try:
         existing = supabase.table("project_progress").select("*").eq("project_id", project_id).limit(1).execute()
-        payload = {
-            "project_id": project_id,
-            "faculty_status": review.faculty_status,
-            "faculty_comment": review.faculty_comment or "",
-            "updated_at": "now()",
-        }
-        if existing.data:
-            res = supabase_admin.table("project_progress").update(payload).eq("project_id", project_id).execute()
+
+        phase = review.phase  # e.g. "phase_1", "phase_2", "phase_3"
+
+        if phase and phase in ("phase_1", "phase_2", "phase_3"):
+            # Build payload with mark + phase-specific review columns
+            mark_key = f"{phase}_mark"  # e.g. phase_1_mark
+            payload = {
+                "project_id": project_id,
+                "updated_at": "now()",
+            }
+
+            # Save the phase mark
+            if review.phase_mark is not None:
+                payload[mark_key] = review.phase_mark
+
+            # Try to save phase-specific review columns
+            phase_status_key = f"faculty_{phase}_status"
+            phase_comment_key = f"faculty_{phase}_comment"
+            payload[phase_status_key] = review.faculty_status
+            payload[phase_comment_key] = review.faculty_comment or ""
+
+            try:
+                if existing.data:
+                    supabase_admin.table("project_progress").update(payload).eq("project_id", project_id).execute()
+                else:
+                    payload["faculty_status"] = "pending"
+                    supabase_admin.table("project_progress").insert(payload).execute()
+            except Exception:
+                # Phase review columns may not exist yet — fall back to saving mark + overall status only
+                fallback = {
+                    "project_id": project_id,
+                    "faculty_status": review.faculty_status,
+                    "faculty_comment": review.faculty_comment or "",
+                    "updated_at": "now()",
+                }
+                if review.phase_mark is not None:
+                    fallback[mark_key] = review.phase_mark
+                if existing.data:
+                    supabase_admin.table("project_progress").update(fallback).eq("project_id", project_id).execute()
+                else:
+                    supabase_admin.table("project_progress").insert(fallback).execute()
+
+            # Recompute aggregate faculty_status from all 3 phases
+            try:
+                updated_res = supabase.table("project_progress").select("*").eq("project_id", project_id).limit(1).execute()
+                updated_data = (updated_res.data or [{}])[0] if updated_res.data else {}
+
+                phase_statuses = [
+                    updated_data.get("faculty_phase_1_status", "pending"),
+                    updated_data.get("faculty_phase_2_status", "pending"),
+                    updated_data.get("faculty_phase_3_status", "pending"),
+                ]
+
+                if all(s == "approved" for s in phase_statuses):
+                    aggregate_status = "approved"
+                elif any(s == "rejected" for s in phase_statuses):
+                    aggregate_status = "rejected"
+                else:
+                    aggregate_status = "pending"
+
+                supabase_admin.table("project_progress").update({
+                    "faculty_status": aggregate_status,
+                }).eq("project_id", project_id).execute()
+            except Exception:
+                pass  # Phase columns may not exist; aggregate stays as-is
+
+            # Recompute completion_percentage from marks
+            try:
+                final_res = supabase.table("project_progress").select("*").eq("project_id", project_id).limit(1).execute()
+                final_data = (final_res.data or [{}])[0] if final_res.data else {}
+                completion = calculate_status_score(final_data)
+                supabase_admin.table("project_progress").update({
+                    "completion_percentage": completion,
+                }).eq("project_id", project_id).execute()
+            except Exception:
+                pass
+
+            result = supabase.table("project_progress").select("*").eq("project_id", project_id).limit(1).execute()
+            return {"success": True, "data": (result.data or [payload])[0]}
         else:
-            res = supabase_admin.table("project_progress").insert(payload).execute()
-        return {"success": True, "data": (res.data or [payload])[0]}
+            # Legacy: overall review (backward compatible)
+            payload = {
+                "project_id": project_id,
+                "faculty_status": review.faculty_status,
+                "faculty_comment": review.faculty_comment or "",
+                "updated_at": "now()",
+            }
+            if existing.data:
+                res = supabase_admin.table("project_progress").update(payload).eq("project_id", project_id).execute()
+            else:
+                res = supabase_admin.table("project_progress").insert(payload).execute()
+            return {"success": True, "data": (res.data or [payload])[0]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        tb = traceback.format_exc()
+        print(tb)
+        raise HTTPException(status_code=500, detail=tb)
 
 
 @router.post("/progress/{project_id}/hod-review")

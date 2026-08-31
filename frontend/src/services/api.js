@@ -91,6 +91,9 @@ export const hodAPI = {
     deleteStudent: async (id) => {
         return fetchWithAuth(`/hod/students/${id}`, { method: 'DELETE' });
     },
+    getBatches: async () => {
+        return fetchWithAuth('/hod/students/batches');
+    },
 
     // Events
     getEvents: async () => {
